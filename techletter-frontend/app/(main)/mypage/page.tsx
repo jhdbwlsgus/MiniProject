@@ -697,8 +697,8 @@ export default function MyPage() {
         </div>
 
         {/* 설정 */}
-        <div className="flex flex-col pt-4">
-          {/* 👇 알림 설정을 <div>에서 <Link>로 변경하여 클릭 이동 가능하게! */}
+        <div className="flex flex-col pt-4 border-t border-gray-100 dark:border-[#2E2E2E] mt-4">
+          
           <Link href="/mypage/notifications" className="flex justify-between items-center py-4 border-b border-gray-100 dark:border-[#2E2E2E] hover:bg-gray-50 dark:hover:bg-[#1E1E1E] transition -mx-2 px-2 rounded-xl cursor-pointer">
             <div className="flex items-center gap-3">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -712,13 +712,30 @@ export default function MyPage() {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
               <span className="text-sm text-gray-900 dark:text-gray-200">다크모드</span>
             </div>
-            {/* 👇 다크모드 버튼도 진짜 Toggle 컴포넌트로 교체! */}
             <Toggle on={isDark} onToggle={toggleDarkMode} />
           </div>
 
-          <button onClick={handleLogout} className="flex items-center gap-3 py-4 -mx-2 px-2 hover:bg-red-50 dark:hover:bg-red-900/10 transition rounded-xl">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            <span className="text-sm text-red-500 dark:text-red-400 font-medium">로그아웃</span>
+          {/* 🟢 비밀번호 변경 (소셜 로그인이 아닌 이메일 유저에게만 노출) */}
+          {!user?.socialProvider && (
+            <Link href="/mypage/password" className="flex justify-between items-center py-4 border-b border-gray-100 dark:border-[#2E2E2E] hover:bg-gray-50 dark:hover:bg-[#1E1E1E] transition -mx-2 px-2 rounded-xl cursor-pointer">
+              <div className="flex items-center gap-3">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <span className="text-sm text-gray-900 dark:text-gray-200">비밀번호 변경</span>
+              </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </Link>
+          )}
+
+          {/* 로그아웃 */}
+          <button onClick={handleLogout} className="flex items-center gap-3 py-4 -mx-2 px-2 border-b border-gray-100 dark:border-[#2E2E2E] hover:bg-gray-50 dark:hover:bg-[#1E1E1E] transition rounded-xl">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">로그아웃</span>
+          </button>
+
+          {/* 🟢 회원 탈퇴 */}
+          <button onClick={handleDeleteAccount} className="flex items-center gap-3 py-4 -mx-2 px-2 hover:bg-red-50 dark:hover:bg-red-900/10 transition rounded-xl mt-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            <span className="text-sm text-red-500 dark:text-red-400 font-medium">회원 탈퇴</span>
           </button>
         </div>
 
