@@ -100,14 +100,14 @@ export default function AdminNewsPage() {
       <header className="sticky top-0 z-50 border-b border-gray-800 bg-gray-950">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            <button onClick={() => router.push('/mypage')} className="text-gray-400 transition hover:text-white" aria-label="뒤로가기">
+            <button onClick={() => router.push('/mypage')} className="text-gray-400 transition hover:text-white" aria-label="마이페이지로 돌아가기">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
             </button>
-            <span className="text-base font-bold">{isReporter ? '내 기사 관리' : '뉴스 관리'}</span>
+            <span className="text-base font-bold">{isReporter ? '내 기사' : '뉴스 관리'}</span>
             <span className="text-xs text-gray-500">총 {total}개</span>
           </div>
           <Link href="/admin/news/create" className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm text-white transition hover:bg-blue-700">
-            + 새 뉴스
+            {isReporter ? '+ 기사 작성' : '+ 새 뉴스'}
           </Link>
         </div>
         <AdminNavTabs />

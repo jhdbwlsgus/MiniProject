@@ -109,14 +109,14 @@ export class News {
   publishedAt!: Date;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'author_id' })
+  @JoinColumn({ name: 'authorId' })
   author!: User;
 
   @Column()
   authorId!: number;
 
   @ManyToOne(() => Category, { nullable: true })
-  @JoinColumn({ name: 'category_id' })
+  @JoinColumn({ name: 'categoryId' })
   category!: Category;
 
   @Column({ nullable: true })

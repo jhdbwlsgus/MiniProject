@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import AdminNavTabs from '@/components/admin/AdminNavTabs';
 import api from '@/lib/api';
 
@@ -27,6 +28,7 @@ const statusLabel: Record<ReporterStatus, string> = {
 };
 
 export default function AdminReportersPage() {
+  const router = useRouter();
   const [reporters, setReporters] = useState<ReporterProfile[]>([]);
   const [filter, setFilter] = useState<ReporterStatus | 'all'>('all');
   const [loading, setLoading] = useState(true);
@@ -47,11 +49,15 @@ export default function AdminReportersPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 pb-24 text-white">
-      <header className="sticky top-0 z-40 border-b border-gray-800 bg-gray-950">
-        <div className="mx-auto max-w-5xl px-4 py-4">
-          <p className="text-xs font-semibold text-blue-400">ADMIN</p>
-          <h1 className="mt-1 text-xl font-bold">기자 관리</h1>
-          <p className="mt-1 text-sm text-gray-400">기자 신청, 승인 기자, 정지 상태를 분리해서 관리합니다.</p>
+      <header className="sticky top-0 z-50 border-b border-gray-800 bg-gray-950">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <button onClick={() => router.push('/mypage')} className="text-gray-400 transition hover:text-white" aria-label="뒤로가기">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <span className="text-base font-bold">기자 관리</span>
+            <span className="text-xs text-gray-500">총 {reporters.length.toLocaleString()}명</span>
+          </div>
         </div>
         <AdminNavTabs />
       </header>

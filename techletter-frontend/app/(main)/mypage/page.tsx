@@ -109,7 +109,7 @@ const formatDate = (dateStr: string | null) => {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 };
 
-function AdminShortcutIcon({ type }: { type: 'write' | 'manage' | 'stats' | 'subscribers' }) {
+function AdminShortcutIcon({ type }: { type: 'write' | 'manage' | 'stats' | 'subscribers' | 'profile' }) {
   const commonProps = {
     width: 22,
     height: 22,
@@ -150,6 +150,16 @@ function AdminShortcutIcon({ type }: { type: 'write' | 'manage' | 'stats' | 'sub
         <circle cx="9" cy="7" r="4" />
         <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
         <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    );
+  }
+
+  if (type === 'profile') {
+    return (
+      <svg {...commonProps}>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
+        <path d="m16 14 1.5 1.5L21 12" />
       </svg>
     );
   }
@@ -561,6 +571,33 @@ export default function MyPage() {
 
         {/* ── 2-1. 기자 퀵메뉴 ── */}
         {isReporter && (
+          <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-[#1E2A24]">
+            <p className="mb-3 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">기자</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {[
+                { href: '/reporter/dashboard', icon: 'stats' as const, label: '기자센터' },
+                { href: '/admin/news/create', icon: 'write' as const, label: '기사 작성' },
+                { href: '/admin/news', icon: 'manage' as const, label: '내 기사' },
+                { href: '/reporter/feed', icon: 'manage' as const, label: '피드' },
+                { href: '/reporter/subscribers', icon: 'subscribers' as const, label: '구독자' },
+                { href: '/reporter/profile/edit', icon: 'profile' as const, label: '프로필 편집' },
+              ].map(({ href, icon, label }) => (
+                <Link
+                  key={`${href}-${label}`}
+                  href={href}
+                  className="flex flex-col items-center gap-1.5 rounded-xl bg-white py-3 text-emerald-700 transition hover:shadow-sm dark:bg-[#2A2A2A] dark:text-emerald-300"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center">
+                    <AdminShortcutIcon type={icon} />
+                  </span>
+                  <span className="text-[11px] font-medium">{label}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {false && isReporter && (
           <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-[#1E2A24]">
             <p className="mb-3 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">기자</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">

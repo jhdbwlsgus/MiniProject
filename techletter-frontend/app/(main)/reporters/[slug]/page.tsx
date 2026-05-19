@@ -33,15 +33,22 @@ interface ReporterProfile {
   headline?: string | null;
   bio?: string | null;
   profileImage?: string | null;
+  coverImage?: string | null;
+  subscriptionPitch?: string | null;
+  portfolioUrl?: string | null;
+  blogUrl?: string | null;
+  githubUrl?: string | null;
   specialties: string[];
   subscriberCount: number;
+  conversionRate?: number;
   newsCount: number;
+  featuredNews?: ReporterNews[];
   news: ReporterNews[];
   feeds: ReporterFeed[];
 }
 
 const feedTypeLabel: Record<string, string> = {
-  comment: 'IT 코멘트',
+  comment: '코멘트',
   briefing: '브리핑',
   behind: '비하인드',
   analysis: '분석',
@@ -101,63 +108,75 @@ export default function ReporterProfilePage() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-5">
-        <section className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-[#2E2E2E] dark:bg-[#1E1E1E]">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
-              <ProfileAvatar nickname={profile.displayName} imageUrl={profile.profileImage} size="lg" />
-              <div>
-                <p className="text-xl font-bold">{profile.displayName}</p>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{profile.headline || 'TechLetter verified reporter'}</p>
+        <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white dark:border-[#2E2E2E] dark:bg-[#1E1E1E]">
+          <div className="h-36 bg-gray-900 dark:bg-[#0B0B0B]">
+            {getImageUrl(profile.coverImage) && (
+              <img src={getImageUrl(profile.coverImage)} alt="" className="h-full w-full object-cover" />
+            )}
+          </div>
+          <div className="p-5 pt-0">
+            <div className="-mt-10 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+              <div className="flex items-end gap-4">
+                <ProfileAvatar nickname={profile.displayName} imageUrl={profile.profileImage} size="lg" />
+                <div className="pb-1">
+                  <p className="text-xl font-bold">{profile.displayName}</p>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{profile.headline || 'TechLetter verified reporter'}</p>
+                </div>
               </div>
+              <button onClick={handleSubscribe} disabled={subscribing} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50">
+                {subscribing ? '구독 중...' : '기자 구독'}
+              </button>
             </div>
-            <button onClick={handleSubscribe} disabled={subscribing} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50">
-              {subscribing ? '구독 중...' : '기자 구독'}
-            </button>
-          </div>
-          <p className="mt-5 max-w-3xl text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-            {profile.bio || '아직 기자 소개가 작성되지 않았습니다.'}
-          </p>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {profile.specialties.map((item) => (
-              <span key={item} className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
-                {item}
-              </span>
-            ))}
-          </div>
-          <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-xl bg-gray-50 p-3 dark:bg-[#121212]">
-              <p className="text-lg font-bold">{profile.newsCount.toLocaleString()}</p>
-              <p className="text-xs text-gray-500">기사</p>
+
+            {profile.subscriptionPitch && (
+              <div className="mt-5 rounded-2xl bg-blue-50 p-4 text-sm font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-200">
+                {profile.subscriptionPitch}
+              </div>
+            )}
+
+            <p className="mt-5 max-w-3xl whitespace-pre-line text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+              {profile.bio || '아직 기자 소개가 작성되지 않았습니다.'}
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {profile.specialties.map((item) => (
+                <span key={item} className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
+                  {item}
+                </span>
+              ))}
             </div>
-            <div className="rounded-xl bg-gray-50 p-3 dark:bg-[#121212]">
-              <p className="text-lg font-bold">{profile.feeds.length.toLocaleString()}</p>
-              <p className="text-xs text-gray-500">피드</p>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {profile.portfolioUrl && <ExternalLink href={profile.portfolioUrl} label="Portfolio" />}
+              {profile.blogUrl && <ExternalLink href={profile.blogUrl} label="Blog/SNS" />}
+              {profile.githubUrl && <ExternalLink href={profile.githubUrl} label="GitHub" />}
             </div>
-            <div className="rounded-xl bg-gray-50 p-3 dark:bg-[#121212]">
-              <p className="text-lg font-bold">{profile.subscriberCount.toLocaleString()}</p>
-              <p className="text-xs text-gray-500">구독자</p>
+
+            <div className="mt-5 grid grid-cols-3 gap-2 text-center">
+              <Metric label="기사" value={profile.newsCount} />
+              <Metric label="피드" value={profile.feeds.length} />
+              <Metric label="구독자" value={profile.subscriberCount} />
             </div>
           </div>
         </section>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
           <section className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-[#2E2E2E] dark:bg-[#1E1E1E]">
+            {!!profile.featuredNews?.length && (
+              <div className="mb-6">
+                <h2 className="text-sm font-bold">대표 기사</h2>
+                <div className="mt-4 grid gap-3">
+                  {profile.featuredNews.map((news) => (
+                    <NewsCard key={news.id} news={news} featured />
+                  ))}
+                </div>
+              </div>
+            )}
+
             <h2 className="text-sm font-bold">작성 기사</h2>
             <div className="mt-4 grid gap-3">
               {profile.news.length ? profile.news.map((news) => (
-                <Link key={news.id} href={`/news/${news.id}`} className="flex gap-3 rounded-xl border border-gray-100 p-3 transition hover:border-blue-200 dark:border-[#2E2E2E] dark:hover:border-blue-900">
-                  <div className="relative h-20 w-24 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-[#2A2A2A]">
-                    {getImageUrl(news.thumbnailUrl) ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={getImageUrl(news.thumbnailUrl)} alt="" className="h-full w-full object-cover" />
-                    ) : null}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-sm font-semibold">{news.title}</p>
-                    <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{news.lead || news.category?.name || 'TechLetter'}</p>
-                    <p className="mt-2 text-[11px] text-gray-400">조회 {news.viewCount.toLocaleString()} · 좋아요 {news.likeCount.toLocaleString()}</p>
-                  </div>
-                </Link>
+                <NewsCard key={news.id} news={news} />
               )) : (
                 <p className="rounded-xl bg-gray-50 p-6 text-center text-sm text-gray-500 dark:bg-[#121212]">아직 공개된 기사가 없습니다.</p>
               )}
@@ -191,5 +210,42 @@ export default function ReporterProfilePage() {
         </div>
       </main>
     </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-gray-50 p-3 dark:bg-[#121212]">
+      <p className="text-lg font-bold">{value.toLocaleString()}</p>
+      <p className="text-xs text-gray-500">{label}</p>
+    </div>
+  );
+}
+
+function ExternalLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-blue-300 hover:text-blue-600 dark:border-[#3A3A3A] dark:text-gray-300 dark:hover:border-blue-800 dark:hover:text-blue-300">
+      {label}
+    </a>
+  );
+}
+
+function NewsCard({ news, featured = false }: { news: ReporterNews; featured?: boolean }) {
+  return (
+    <Link key={news.id} href={`/news/${news.id}`} className={`flex gap-3 rounded-xl border p-3 transition hover:border-blue-200 dark:hover:border-blue-900 ${featured ? 'border-blue-100 bg-blue-50/50 dark:border-blue-900/40 dark:bg-blue-950/20' : 'border-gray-100 dark:border-[#2E2E2E]'}`}>
+      <div className="relative h-20 w-24 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-[#2A2A2A]">
+        {getImageUrl(news.thumbnailUrl) ? (
+          <img src={getImageUrl(news.thumbnailUrl)} alt="" className="h-full w-full object-cover" />
+        ) : null}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          {featured && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">대표</span>}
+          <p className="line-clamp-2 text-sm font-semibold">{news.title}</p>
+        </div>
+        <p className="mt-1 line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{news.lead || news.category?.name || 'TechLetter'}</p>
+        <p className="mt-2 text-[11px] text-gray-400">조회 {news.viewCount.toLocaleString()} · 좋아요 {news.likeCount.toLocaleString()}</p>
+      </div>
+    </Link>
   );
 }

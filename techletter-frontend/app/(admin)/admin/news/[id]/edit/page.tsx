@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api from '@/lib/api';
 import TiptapEditor from '@/components/editor/TiptapEditor';
+import AdminNavTabs from '@/components/admin/AdminNavTabs';
 
 interface Category {
   id: number;
@@ -114,7 +115,7 @@ export default function AdminNewsEditPage() {
     <div className="min-h-screen pb-28 transition-colors duration-200">
       <header className="sticky top-0 z-50 bg-white dark:bg-[#171717] border-b border-gray-200 dark:border-gray-800 transition-colors duration-200">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
-          <button onClick={() => router.back()} className="text-gray-400 hover:text-white transition">
+          <button onClick={() => router.push('/admin/news')} className="text-gray-400 hover:text-white transition" aria-label="내 기사 목록으로 돌아가기">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
           <span className="font-bold text-base flex-1">뉴스 수정</span>
@@ -129,6 +130,7 @@ export default function AdminNewsEditPage() {
             </button>
           </div>
         </div>
+        <AdminNavTabs />
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-5">

@@ -44,6 +44,12 @@ export class ReporterProfile {
   @Column({ type: 'varchar', nullable: true })
   profileImage!: string | null;
 
+  @Column({ type: 'varchar', nullable: true })
+  coverImage!: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  subscriptionPitch!: string | null;
+
   @Column({ type: 'simple-json', nullable: true })
   specialties!: string[] | null;
 
@@ -58,6 +64,9 @@ export class ReporterProfile {
 
   @Column({ type: 'simple-json', nullable: true })
   plannedTopics!: string[] | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  featuredNewsIds!: number[] | null;
 
   @Column({ type: 'varchar', nullable: true })
   githubUrl!: string | null;
@@ -85,6 +94,9 @@ export class ReporterProfile {
 
   @Column({ type: 'int', default: 1 })
   level!: number;
+
+  @Column({ type: 'int', default: 0 })
+  profileViewCount!: number;
 
   @Column({ type: 'text', nullable: true })
   reviewMessage!: string | null;

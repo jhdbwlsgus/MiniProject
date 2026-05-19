@@ -15,10 +15,12 @@ const adminTabs = [
 ];
 
 const reporterTabs = [
+  { href: '/reporter/dashboard', label: '기자센터' },
   { href: '/admin/news/create', label: '기사 작성' },
-  { href: '/admin/news', label: '내 기사 관리' },
-  { href: '/reporter/dashboard', label: '내 피드/통계' },
-  { href: '/reporter/subscribers', label: '내 구독자' },
+  { href: '/admin/news', label: '내 기사' },
+  { href: '/reporter/feed', label: '피드' },
+  { href: '/reporter/subscribers', label: '구독자' },
+  { href: '/reporter/profile/edit', label: '프로필' },
 ];
 
 export default function AdminNavTabs() {
@@ -41,7 +43,9 @@ export default function AdminNavTabs() {
             pathname === tab.href ||
             (tab.href === '/admin/news' && pathname.startsWith('/admin/news/') && pathname !== '/admin/news/create') ||
             (tab.href === '/reporter/dashboard' && pathname.startsWith('/reporter/dashboard')) ||
+            (tab.href === '/reporter/feed' && pathname.startsWith('/reporter/feed')) ||
             (tab.href === '/reporter/subscribers' && pathname.startsWith('/reporter/subscribers')) ||
+            (tab.href === '/reporter/profile/edit' && pathname.startsWith('/reporter/profile/edit')) ||
             (tab.href === '/admin/reporters' && pathname.startsWith('/admin/reporter-requests'));
 
           return (

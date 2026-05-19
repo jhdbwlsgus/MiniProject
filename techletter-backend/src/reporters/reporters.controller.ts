@@ -62,6 +62,12 @@ export class ReportersController {
     return this.reportersService.listMySubscribers(req.user.id, req.user.role);
   }
 
+  @Patch('me/profile')
+  @UseGuards(JwtAuthGuard)
+  updateMyProfile(@Request() req: any, @Body() body: any) {
+    return this.reportersService.updateMyProfile(req.user.id, req.user.role, body);
+  }
+
   @Post('me/feed')
   @UseGuards(JwtAuthGuard)
   createFeed(

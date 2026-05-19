@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { News, NewsStatus } from '../news/news.entity';
 import { NotificationType } from '../notifications/notification.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -14,11 +14,14 @@ interface ReporterProfileDto {
   headline?: string;
   bio?: string;
   profileImage?: string;
+  coverImage?: string;
+  subscriptionPitch?: string;
   specialties?: string[];
   categoryIds?: number[];
   portfolioUrl?: string;
   blogUrl?: string;
   plannedTopics?: string[];
+  featuredNewsIds?: number[];
   githubUrl?: string;
   previousExperience?: string;
   sampleArticleType?: string;
@@ -61,7 +64,11 @@ export class ReportersService {
     });
     if (!reporter) throw new NotFoundException('Reporter profile not found.');
 
-    const [news, feeds, subscriberCount, newsCount] = await Promise.all([
+    reporter.profileViewCount = (reporter.profileViewCount || 0) + 1;
+    await this.reporterProfileRepository.save(reporter);
+
+    const featuredIds = (reporter.featuredNewsIds || []).slice(0, 3);
+    const [news, feeds, subscriberCount, newsCount, featuredNews] = await Promise.all([
       this.newsRepository.find({
         where: { authorId: reporter.userId, status: NewsStatus.PUBLISHED },
         relations: ['category', 'tags'],
@@ -75,12 +82,21 @@ export class ReportersService {
       }),
       this.reporterSubscriptionRepository.count({ where: { reporterProfileId: reporter.id } }),
       this.newsRepository.count({ where: { authorId: reporter.userId, status: NewsStatus.PUBLISHED } }),
+      featuredIds.length
+        ? this.newsRepository.find({
+            where: { id: In(featuredIds), authorId: reporter.userId, status: NewsStatus.PUBLISHED },
+            relations: ['category', 'tags'],
+          })
+        : Promise.resolve([]),
     ]);
+    const featuredById = new Map(featuredNews.map((item) => [item.id, item]));
 
     return {
       ...this.toPublicReporter(reporter),
       subscriberCount,
       newsCount,
+      conversionRate: this.getConversionRate(subscriberCount, reporter.profileViewCount),
+      featuredNews: featuredIds.map((id) => featuredById.get(id)).filter(Boolean),
       news,
       feeds,
     };
@@ -122,11 +138,14 @@ export class ReportersService {
     profile.headline = dto.headline?.trim() || null;
     profile.bio = dto.bio?.trim() || user.bio || null;
     profile.profileImage = dto.profileImage?.trim() || user.profileImage || null;
+    profile.coverImage = dto.coverImage?.trim() || null;
+    profile.subscriptionPitch = dto.subscriptionPitch?.trim() || null;
     profile.specialties = dto.specialties?.filter(Boolean).map((item) => item.trim()) || [];
     profile.categoryIds = dto.categoryIds || user.interestCategoryIds || [];
     profile.portfolioUrl = dto.portfolioUrl?.trim() || null;
     profile.blogUrl = dto.blogUrl?.trim() || null;
     profile.plannedTopics = dto.plannedTopics?.filter(Boolean).map((item) => item.trim()) || [];
+    profile.featuredNewsIds = (dto.featuredNewsIds || []).slice(0, 3);
     profile.githubUrl = dto.githubUrl?.trim() || null;
     profile.previousExperience = dto.previousExperience?.trim() || null;
     profile.sampleArticleType = dto.sampleArticleType?.trim() || null;
@@ -216,7 +235,16 @@ export class ReportersService {
 
     return {
       profile,
-      stats: { subscriberCount, feedCount, publishedCount, draftCount, totalViews, totalLikes },
+      stats: {
+        subscriberCount,
+        feedCount,
+        publishedCount,
+        draftCount,
+        totalViews,
+        totalLikes,
+        profileViewCount: profile.profileViewCount || 0,
+        conversionRate: this.getConversionRate(subscriberCount, profile.profileViewCount || 0),
+      },
       news,
     };
   }
@@ -245,6 +273,38 @@ export class ReportersService {
         } : null,
       };
     });
+  }
+
+  async updateMyProfile(userId: number, role: string, dto: ReporterProfileDto) {
+    const profile = await this.requireReporterProfile(userId, role);
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found.');
+
+    const displayName = dto.displayName?.trim();
+    if (!displayName) throw new BadRequestException('Display name is required.');
+
+    profile.displayName = displayName;
+    profile.headline = dto.headline?.trim() || null;
+    profile.bio = dto.bio?.trim() || null;
+    profile.profileImage = dto.profileImage?.trim() || null;
+    profile.coverImage = dto.coverImage?.trim() || null;
+    profile.subscriptionPitch = dto.subscriptionPitch?.trim() || null;
+    profile.specialties = dto.specialties?.filter(Boolean).map((item) => item.trim()) || [];
+    profile.categoryIds = dto.categoryIds || [];
+    profile.portfolioUrl = dto.portfolioUrl?.trim() || null;
+    profile.blogUrl = dto.blogUrl?.trim() || null;
+    profile.githubUrl = dto.githubUrl?.trim() || null;
+    profile.featuredNewsIds = (dto.featuredNewsIds || []).slice(0, 3);
+
+    user.nickname = displayName;
+    user.bio = profile.bio;
+    user.profileImage = profile.profileImage || '';
+    user.interestCategoryIds = profile.categoryIds;
+
+    await this.userRepository.save(user);
+    const saved = await this.reporterProfileRepository.save(profile);
+    saved.user = user;
+    return saved;
   }
 
   async listMyFeeds(userId: number, role: string) {
@@ -314,8 +374,15 @@ export class ReportersService {
       headline: reporter.headline,
       bio: reporter.bio,
       profileImage: reporter.profileImage,
+      coverImage: reporter.coverImage,
+      subscriptionPitch: reporter.subscriptionPitch,
       specialties: reporter.specialties || [],
       categoryIds: reporter.categoryIds || [],
+      portfolioUrl: reporter.portfolioUrl,
+      blogUrl: reporter.blogUrl,
+      githubUrl: reporter.githubUrl,
+      featuredNewsIds: reporter.featuredNewsIds || [],
+      profileViewCount: reporter.profileViewCount || 0,
       level: reporter.level,
       approvedAt: reporter.approvedAt,
       user: reporter.user ? {
@@ -339,6 +406,11 @@ export class ReportersService {
 
   private ensureAdmin(role: string) {
     if (role !== UserRole.ADMIN) throw new ForbiddenException('Admin permission is required.');
+  }
+
+  private getConversionRate(subscriberCount: number, profileViewCount: number) {
+    if (!profileViewCount) return 0;
+    return Math.round((subscriberCount / profileViewCount) * 1000) / 10;
   }
 
   private async createUniqueSlug(baseSlug: string) {

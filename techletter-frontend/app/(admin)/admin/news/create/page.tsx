@@ -197,6 +197,7 @@ function getArticleQualityReport(form: any, sourceReferences: SourceReference[])
 export default function AdminNewsCreatePage() {
   const router = useRouter();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [role, setRole] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: '',
     content: '',
@@ -460,8 +461,14 @@ export default function AdminNewsCreatePage() {
 
   useEffect(() => {
     api.get('/users/me')
-      .then((res) => setDraftKey(getDraftKey(res.data?.id)))
-      .catch(() => setDraftKey(getDraftKey()))
+      .then((res) => {
+        setRole(res.data?.role || null);
+        setDraftKey(getDraftKey(res.data?.id));
+      })
+      .catch(() => {
+        setRole(null);
+        setDraftKey(getDraftKey());
+      })
       .finally(() => setDraftKeyReady(true));
     refreshAllDrafts();
   }, [refreshAllDrafts]);
@@ -808,6 +815,7 @@ export default function AdminNewsCreatePage() {
   const qualityReport = getArticleQualityReport(form, sourceReferences);
   const qualityColor = qualityReport.score >= 80 ? 'text-emerald-400' : qualityReport.score >= 55 ? 'text-yellow-400' : 'text-red-400';
   const qualityBarColor = qualityReport.score >= 80 ? 'bg-emerald-500' : qualityReport.score >= 55 ? 'bg-yellow-500' : 'bg-red-500';
+  const isReporter = role === 'reporter';
 
   const applyMetaDescription = (description: string) => {
     setForm((f) => ({ ...f, metaDescription: description }));
@@ -992,7 +1000,7 @@ export default function AdminNewsCreatePage() {
           }} className="text-gray-400 hover:text-white transition">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
-          <span className="font-bold text-base flex-1">새 뉴스 작성</span>
+          <span className="font-bold text-base flex-1">{isReporter ? '기사 작성' : '새 뉴스 작성'}</span>
 
           {/* 저장 상태 */}
           <div className="text-xs text-gray-500 flex items-center gap-1">

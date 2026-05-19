@@ -12,6 +12,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import OpenAI from 'openai'; // ✅ OpenAI 임포트 추가
 
 import { Subscription } from '../subscriptions/subscription.entity';
+import { ReporterProfile, ReporterStatus } from '../reporters/reporter-profile.entity';
 
 interface NaverNewsItem {
   title: string;
@@ -107,6 +108,8 @@ export class NewsService {
     private likeRepository: Repository<Like>,
     @InjectRepository(Subscription)
     private subscriptionRepository: Repository<Subscription>,
+    @InjectRepository(ReporterProfile)
+    private reporterProfileRepository: Repository<ReporterProfile>,
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService, // ✅ 이 부분이 추가되었습니다!
   ) {
@@ -656,7 +659,7 @@ ${text}`,
   }
 
   async create(dto: CreateNewsDto, requester: { id: number; role: string }) {
-    this.ensureCanCreateNews(requester);
+    await this.ensureCanCreateNews(requester);
     const cleanDto = this.sanitizeNewsDtoForRole(dto, requester.role) as CreateNewsDto;
     const slug = cleanDto.slug || this.generateSlug(cleanDto.title);
     let tags: Tag[] = [];
@@ -700,7 +703,7 @@ ${text}`,
 
   async update(id: number, dto: UpdateNewsDto, requester?: { id: number; role: string }) {
     const news = await this.getNewsEntity(id);
-    this.ensureCanManageNews(news, requester);
+    await this.ensureCanManageNews(news, requester);
     const cleanDto = this.sanitizeNewsDtoForRole(dto, requester?.role) as UpdateNewsDto;
 
     if (cleanDto.tags) {
@@ -737,7 +740,7 @@ ${text}`,
 
   async remove(id: number, requester?: { id: number; role: string }) {
     const news = await this.getNewsEntity(id);
-    this.ensureCanManageNews(news, requester);
+    await this.ensureCanManageNews(news, requester);
     return this.newsRepository.remove(news);
   }
 
@@ -750,16 +753,35 @@ ${text}`,
     return news;
   }
 
-  private ensureCanManageNews(news: News, requester?: { id: number; role: string }) {
+  private async ensureCanManageNews(news: News, requester?: { id: number; role: string }) {
     if (!requester) return;
     if (requester.role === 'admin') return;
-    if (news.authorId === requester.id) return;
+    if (news.authorId === requester.id) {
+      await this.ensureApprovedReporter(requester);
+      return;
+    }
     throw new ForbiddenException('You can only manage your own news.');
   }
 
-  private ensureCanCreateNews(requester?: { id: number; role: string }) {
-    if (!requester || (requester.role !== 'admin' && requester.role !== 'reporter')) {
+  private async ensureCanCreateNews(requester?: { id: number; role: string }) {
+    if (!requester) {
       throw new ForbiddenException('Approved reporter or admin permission is required.');
+    }
+    if (requester.role === 'admin') return;
+    await this.ensureApprovedReporter(requester);
+  }
+
+  private async ensureApprovedReporter(requester: { id: number; role: string }) {
+    if (requester.role !== 'reporter') {
+      throw new ForbiddenException('Approved reporter permission is required.');
+    }
+
+    const profile = await this.reporterProfileRepository.findOne({
+      where: { userId: requester.id, status: ReporterStatus.APPROVED },
+    });
+
+    if (!profile) {
+      throw new ForbiddenException('Reporter approval is required before writing news.');
     }
   }
 

@@ -23,7 +23,7 @@ interface News {
   likeCount: number;
   shareCount: number;
   createdAt: string;
-  author: { id: number; nickname: string };
+  author: { id: number; nickname: string; profileImage?: string | null };
 }
 
 interface ReporterProfile {
@@ -44,6 +44,45 @@ interface Comment {
 }
 
 const formatNumber = (value: number | undefined) => (value ?? 0).toLocaleString();
+
+function AuthorProfileLink({
+  news,
+  reporterProfile,
+}: {
+  news: News;
+  reporterProfile: ReporterProfile | null;
+}) {
+  const displayName = reporterProfile?.displayName || news.author?.nickname || '작성자';
+  const imageUrl = getImageUrl(reporterProfile?.profileImage || news.author?.profileImage);
+  const content = (
+    <div className="flex items-center gap-3 rounded-2xl border border-gray-800 bg-gray-900/70 p-3 transition hover:border-blue-800 hover:bg-blue-950/30">
+      {imageUrl ? (
+        <img src={imageUrl} alt="" className="h-11 w-11 rounded-full object-cover" />
+      ) : (
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+          {displayName[0]}
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-bold text-white">{displayName}</p>
+          {reporterProfile && (
+            <span className="rounded-full bg-blue-600/20 px-2 py-0.5 text-[11px] font-semibold text-blue-300">
+              기자
+            </span>
+          )}
+        </div>
+        <p className="mt-1 line-clamp-1 text-xs text-gray-400">
+          {reporterProfile?.headline || (reporterProfile ? '기자의 피드와 작성 기사를 확인해보세요.' : '작성자 프로필')}
+        </p>
+      </div>
+      {reporterProfile && <span className="text-xs font-semibold text-blue-300">프로필</span>}
+    </div>
+  );
+
+  if (!reporterProfile) return content;
+  return <Link href={`/reporters/${reporterProfile.slug}`}>{content}</Link>;
+}
 
 export default function NewsDetailPage() {
   const { id } = useParams();
@@ -168,35 +207,29 @@ export default function NewsDetailPage() {
       <main className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6">
         <div>
           <h1 className="mb-3 text-xl font-bold leading-tight">{news.title}</h1>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+          <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
             <span>조회 {formatNumber(news.viewCount)}</span>
             <span>좋아요 {formatNumber(news.likeCount)}</span>
             <span>댓글 {formatNumber(comments.length)}</span>
             <span>공유 {formatNumber(news.shareCount)}</span>
             <span>{new Date(news.createdAt).toLocaleDateString('ko-KR')}</span>
-            {reporterProfile ? (
-              <Link href={`/reporters/${reporterProfile.slug}`} className="font-semibold text-blue-400 hover:text-blue-300">
-                {news.author?.nickname}
-              </Link>
-            ) : (
-              <span>{news.author?.nickname}</span>
-            )}
           </div>
+          <AuthorProfileLink news={news} reporterProfile={reporterProfile} />
         </div>
 
-        {reporterProfile && (
-          <Link href={`/reporters/${reporterProfile.slug}`} className="flex items-center gap-3 rounded-2xl border border-blue-900/40 bg-blue-950/30 p-4 transition hover:border-blue-700">
-            {getImageUrl(reporterProfile.profileImage) ? (
-              <img src={getImageUrl(reporterProfile.profileImage)} alt="" className="h-11 w-11 rounded-full object-cover" />
+        {false && reporterProfile && (
+          <Link href={`/reporters/${reporterProfile?.slug}`} className="flex items-center gap-3 rounded-2xl border border-blue-900/40 bg-blue-950/30 p-4 transition hover:border-blue-700">
+            {getImageUrl(reporterProfile?.profileImage) ? (
+              <img src={getImageUrl(reporterProfile?.profileImage)} alt="" className="h-11 w-11 rounded-full object-cover" />
             ) : (
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                {reporterProfile.displayName[0]}
+                {reporterProfile?.displayName?.[0]}
               </div>
             )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-white">{reporterProfile.displayName}</p>
+              <p className="truncate text-sm font-bold text-white">{reporterProfile?.displayName}</p>
               <p className="mt-1 line-clamp-1 text-xs text-blue-100/80">
-                {reporterProfile.headline || '기자의 피드와 작성 기사를 확인해보세요.'}
+                {reporterProfile?.headline || '기자의 피드와 작성 기사를 확인해보세요.'}
               </p>
             </div>
             <span className="text-xs font-semibold text-blue-300">프로필</span>
