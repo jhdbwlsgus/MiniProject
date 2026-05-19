@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+
 const api = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -33,7 +35,7 @@ api.interceptors.response.use(
 export const getImageUrl = (url: string | null | undefined): string => {
   if (!url) return '';
   if (url.startsWith('http')) return url;
-  return `http://localhost:3000${url}`;
+  return `${API_BASE_URL}${url}`;
 };
 
 export default api;
