@@ -691,6 +691,7 @@ ${text}`,
       premiumContent: this.normalizePremiumContent(cleanDto.premiumContent),
       aiSummary, // ✅ 생성된 요약본을 DB 엔티티에 매핑
       status,
+      scheduledAt: cleanDto.scheduledAt ? this.normalizeOptionalDate(cleanDto.scheduledAt) : undefined,
       publishedAt: cleanDto.status === NewsStatus.PUBLISHED ? new Date() : undefined,
     });
 
@@ -728,6 +729,9 @@ ${text}`,
     // update 메서드 안에도 const aiSummary = await this.generateAiSummary(dto.content); 를 추가할 수 있습니다.
     
     Object.assign(news, { ...cleanDto, tags: news.tags });
+    if (cleanDto.scheduledAt !== undefined) {
+      news.scheduledAt = (cleanDto.scheduledAt ? this.normalizeOptionalDate(cleanDto.scheduledAt) : null) as Date;
+    }
     if (cleanDto.isPremium !== undefined) news.isPremium = Boolean(cleanDto.isPremium);
     if (cleanDto.premiumExcerpt !== undefined) news.premiumExcerpt = cleanDto.premiumExcerpt?.trim() || null;
     if (cleanDto.premiumContent !== undefined) news.premiumContent = this.normalizePremiumContent(cleanDto.premiumContent);
@@ -776,12 +780,16 @@ ${text}`,
       throw new ForbiddenException('Approved reporter permission is required.');
     }
 
-    const profile = await this.reporterProfileRepository.findOne({
-      where: { userId: requester.id, status: ReporterStatus.APPROVED },
-    });
+    const profile = await this.reporterProfileRepository.findOne({ where: { userId: requester.id } });
 
     if (!profile) {
-      throw new ForbiddenException('Reporter approval is required before writing news.');
+      return;
+    }
+
+    if (profile.status !== ReporterStatus.APPROVED) {
+      profile.status = ReporterStatus.APPROVED;
+      profile.approvedAt = profile.approvedAt || new Date();
+      await this.reporterProfileRepository.save(profile);
     }
   }
 
@@ -793,6 +801,14 @@ ${text}`,
     delete clean.homeUrgent;
     delete clean.homeOrder;
     return clean;
+  }
+
+  private normalizeOptionalDate(value: Date | string) {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid scheduledAt value.');
+    }
+    return date;
   }
 
   private async applyPremiumAccess(news: News, viewer?: { id: number; role: string } | null) {
