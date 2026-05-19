@@ -88,15 +88,17 @@ export class AuthController {
 
     try {
       const result = await this.authService.socialLogin(req.user, mode);
-      return this.redirectWithToken(res, result.accessToken);
+      return this.redirectWithToken(res, result.accessToken, mode);
     } catch (error) {
       return this.redirectWithError(res, error, mode);
     }
   }
 
-  private redirectWithToken(res: Response, accessToken: string) {
+  private redirectWithToken(res: Response, accessToken: string, mode: 'login' | 'signup') {
     const frontendUrl = this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3001';
-    return res.redirect(`${frontendUrl}/auth/callback?token=${encodeURIComponent(accessToken)}`);
+    return res.redirect(
+      `${frontendUrl}/auth/callback?token=${encodeURIComponent(accessToken)}&mode=${mode}`,
+    );
   }
 
   private redirectWithError(res: Response, error: unknown, mode: 'login' | 'signup' = 'signup') {

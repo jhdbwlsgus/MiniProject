@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ReporterApplyDto } from './dto/reporter-apply.dto';
 import { RejectReporterDto } from './dto/reject-reporter.dto';
+import { ReporterFeedType } from './reporter-feed.entity';
 import { ReporterStatus } from './reporter-profile.entity';
 import { ReportersService } from './reporters.service';
 

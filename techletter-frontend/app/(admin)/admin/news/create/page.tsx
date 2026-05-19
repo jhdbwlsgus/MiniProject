@@ -260,6 +260,7 @@ export default function AdminNewsCreatePage() {
   const [serverDraftId, setServerDraftId] = useState<number | null>(null);
   const [showDraftManager, setShowDraftManager] = useState(false);
   const skipDirtyCheckRef = useRef(false);
+  const canWriteNews = currentUser?.role === 'admin' || reporterProfile?.status === 'approved';
 
   // AI 패널
   const [showAiPanel, setShowAiPanel] = useState(false);
@@ -280,6 +281,30 @@ export default function AdminNewsCreatePage() {
   const [interviewFile, setInterviewFile] = useState<File | null>(null);
   const [interviewResult, setInterviewResult] = useState<InterviewAnalysis | null>(null);
   const interviewFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    Promise.all([
+      api.get('/users/me'),
+      api.get('/reporters/me').catch(() => ({ data: null })),
+    ])
+      .then(([userRes, reporterRes]) => {
+        if (!active) return;
+        setCurrentUser(userRes.data);
+        setReporterProfile(reporterRes.data);
+      })
+      .catch(() => {
+        if (active) router.replace('/login');
+      })
+      .finally(() => {
+        if (active) setReporterGateLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   // 예상 수신자
   const [estimatedRecipients, setEstimatedRecipients] = useState<Record<string, number>>({
@@ -441,6 +466,9 @@ export default function AdminNewsCreatePage() {
     refreshAllDrafts();
   }, [refreshAllDrafts]);
 
+  useEffect(() => {
+    if (!draftKeyReady) return;
+
     api.get('/categories').then(res => setCategories(res.data)).catch(() => {});
     const saved = localStorage.getItem(draftKey) || localStorage.getItem(LEGACY_DRAFT_KEY);
     if (saved) {
@@ -462,8 +490,7 @@ export default function AdminNewsCreatePage() {
         localStorage.removeItem(LEGACY_DRAFT_KEY);
       } catch {}
     }
-    return () => { mounted = false; };
-  }, []);
+  }, [draftKey, draftKeyReady]);
 
   useEffect(() => {
     if (skipDirtyCheckRef.current) {
@@ -769,11 +796,13 @@ export default function AdminNewsCreatePage() {
 
   const seoScore = aiSeoResult?.score ?? basicSeoScore;
   const seoItems = aiSeoResult?.items.length ? aiSeoResult.items : basicSeoItems;
+  const seoReport = getSeoReport(form);
   const seoColor = seoScore >= 80 ? 'text-emerald-400' : seoScore >= 50 ? 'text-yellow-400' : 'text-red-400';
   const seoBarColor = seoScore >= 80 ? 'bg-emerald-500' : seoScore >= 50 ? 'bg-yellow-500' : 'bg-red-500';
 
   const displayedSeoScore = Math.max(0, Math.min(100, Math.round((seoItems.filter((item) => item.ok).length / seoItems.length) * 100)));
   const displayedSeoBarColor = displayedSeoScore >= 80 ? 'bg-emerald-500' : displayedSeoScore >= 50 ? 'bg-yellow-500' : 'bg-red-500';
+  const displayedSeoColor = displayedSeoScore >= 80 ? 'text-emerald-400' : displayedSeoScore >= 50 ? 'text-yellow-400' : 'text-red-400';
   const seoStatusLabel = displayedSeoScore >= 80 ? '발행 준비 좋음' : displayedSeoScore >= 50 ? '보완 필요' : '필수 항목 부족';
   const metaPreview = form.metaDescription || form.lead || form.content.replace(/<[^>]*>/g, '').slice(0, 120);
   const qualityReport = getArticleQualityReport(form, sourceReferences);
@@ -835,12 +864,12 @@ export default function AdminNewsCreatePage() {
         <span className="text-sm text-gray-500">뉴스레터에만 포함되는 추가 콘텐츠</span>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <span className={`rounded-full px-3 py-1 text-xs font-medium ${isPremium ? 'bg-emerald-600 text-emerald-100' : 'bg-gray-800 text-gray-300'}`}>
-          {isPremium ? '프리미엄 콘텐츠' : '무료 공개 콘텐츠'}
+        <span className={`rounded-full px-3 py-1 text-xs font-medium ${form.isPremium ? 'bg-emerald-600 text-emerald-100' : 'bg-gray-800 text-gray-300'}`}>
+          {form.isPremium ? '프리미엄 콘텐츠' : '무료 공개 콘텐츠'}
         </span>
         <p className="text-xs text-gray-500">프리미엄으로 설정하면 구독자 전용 또는 유료 기사 표시로 활용할 수 있습니다.</p>
       </div>
-    </section>
+    </div>
   );
 
   if (reporterGateLoading) {
