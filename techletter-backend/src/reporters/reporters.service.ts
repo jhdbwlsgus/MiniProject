@@ -112,6 +112,13 @@ export class ReportersService {
   }
 
   async getMine(userId: number) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found.');
+
+    if (user.role === UserRole.REPORTER) {
+      return this.ensureReporterProfileForRole(user);
+    }
+
     return this.reporterProfileRepository.findOne({
       where: { userId },
       relations: ['user'],
@@ -397,10 +404,70 @@ export class ReportersService {
     if (role !== UserRole.REPORTER && role !== UserRole.ADMIN) {
       throw new ForbiddenException('Reporter permission is required.');
     }
-    const profile = await this.reporterProfileRepository.findOne({ where: { userId } });
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found.');
+
+    const profile = role === UserRole.REPORTER
+      ? await this.ensureReporterProfileForRole(user)
+      : await this.reporterProfileRepository.findOne({ where: { userId } });
+
     if (!profile || profile.status !== ReporterStatus.APPROVED) {
       throw new ForbiddenException('Approved reporter profile is required.');
     }
+    return profile;
+  }
+
+  private async ensureReporterProfileForRole(user: User) {
+    let profile = await this.reporterProfileRepository.findOne({
+      where: { userId: user.id },
+      relations: ['user'],
+    });
+
+    if (!profile) {
+      const displayName = user.nickname || user.email.split('@')[0];
+      profile = this.reporterProfileRepository.create({
+        userId: user.id,
+        user,
+        slug: await this.createUniqueSlug(this.slugify(displayName)),
+        displayName,
+        headline: null,
+        bio: user.bio || null,
+        profileImage: user.profileImage || null,
+        coverImage: null,
+        subscriptionPitch: null,
+        specialties: [],
+        categoryIds: user.interestCategoryIds || [],
+        portfolioUrl: null,
+        blogUrl: null,
+        plannedTopics: [],
+        featuredNewsIds: [],
+        githubUrl: null,
+        previousExperience: null,
+        sampleArticleType: null,
+        sampleArticleText: null,
+        sampleArticleUrl: null,
+        sampleArticleFileUrl: null,
+        status: ReporterStatus.APPROVED,
+        approvedAt: new Date(),
+        level: 1,
+        profileViewCount: 0,
+        reviewMessage: null,
+        reviewedAt: null,
+        reviewedById: null,
+        realName: displayName,
+        organization: null,
+      });
+      return this.reporterProfileRepository.save(profile);
+    }
+
+    if (profile.status !== ReporterStatus.APPROVED) {
+      profile.status = ReporterStatus.APPROVED;
+      profile.approvedAt = profile.approvedAt || new Date();
+      if (!profile.level) profile.level = 1;
+      profile = await this.reporterProfileRepository.save(profile);
+    }
+
+    profile.user = user;
     return profile;
   }
 

@@ -261,7 +261,10 @@ export default function AdminNewsCreatePage() {
   const [serverDraftId, setServerDraftId] = useState<number | null>(null);
   const [showDraftManager, setShowDraftManager] = useState(false);
   const skipDirtyCheckRef = useRef(false);
-  const canWriteNews = currentUser?.role === 'admin' || reporterProfile?.status === 'approved';
+  const canWriteNews =
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'reporter' ||
+    reporterProfile?.status === 'approved';
 
   // AI 패널
   const [showAiPanel, setShowAiPanel] = useState(false);
@@ -613,6 +616,22 @@ export default function AdminNewsCreatePage() {
       setError('임시저장할 제목이나 내용을 입력해주세요.');
       return;
     }
+    if (status !== 'draft') {
+      const minPublishScore = 80;
+      const failedRequiredSeoItems = seoReport.required.filter((item) => !item.ok);
+      const failedQualityItems = qualityReport.checks.filter((item) => !item.ok);
+      const blockers = [
+        seoReport.score < minPublishScore ? `SEO 점수 ${seoReport.score}/${minPublishScore}` : '',
+        qualityReport.score < minPublishScore ? `기사 품질 점수 ${qualityReport.score}/${minPublishScore}` : '',
+        failedRequiredSeoItems.length ? `SEO 필수 항목: ${failedRequiredSeoItems.map((item) => item.label).join(', ')}` : '',
+        failedQualityItems.length ? `품질 보완 항목: ${failedQualityItems.map((item) => item.label).join(', ')}` : '',
+      ].filter(Boolean);
+
+      if (blockers.length) {
+        setError(`발행 기준을 통과하지 못했습니다. ${blockers.join(' / ')}`);
+        return;
+      }
+    }
     if (newsletterOption.enabled && newsletterOption.isScheduled && !newsletterOption.scheduledAt) {
       setError('뉴스레터 예약 발송 시간을 입력해주세요.'); return;
     }
@@ -641,8 +660,6 @@ export default function AdminNewsCreatePage() {
       localStorage.removeItem(LEGACY_DRAFT_KEY);
       setHasUnsaved(false);
       if (status === 'draft') alert('임시저장 되었습니다.');
-      else if (newsletterOption.enabled) alert(newsletterOption.isScheduled ? '기사 저장 + 뉴스레터 예약 완료!' : '기사 발행 + 뉴스레터 발송 완료!');
-      else alert('발행되었습니다!');
       router.push('/admin/news');
     } catch (err: any) {
       setError(err.response?.data?.message || '뉴스 작성에 실패했습니다.');

@@ -123,7 +123,7 @@ export class NewsController {
   @UseGuards(JwtAuthGuard)
   create(@Body() dto: CreateNewsDto, @Request() req: any) {
     this.assertReporterOrAdmin(req.user);
-    return this.newsService.create(dto, req.user.id);
+    return this.newsService.create(dto, req.user);
   }
 
   @Put(':id')
