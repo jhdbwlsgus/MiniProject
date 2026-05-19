@@ -151,7 +151,7 @@ export default function SignupPage() {
           </h1>
         </Link>
         <p className="mb-8 text-center text-sm text-gray-500 dark:text-gray-400">
-          관심 있는 IT 뉴스를 더 편하게 받아보세요
+          관심 있는 IT 뉴스를 편하게 받아보세요.
         </p>
 
         {error && <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>}

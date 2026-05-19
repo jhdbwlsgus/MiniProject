@@ -352,15 +352,6 @@ export default function MyPage() {
         setUser(userRes.data);
         setSubscription(subRes.data);
         setReporterProfile(reporterRes.data);
-        if (reporterRes.data?.status === 'rejected') {
-          setReporterApplyOpen(true);
-          setReporterApplyForm({
-            realName: reporterRes.data.realName || '',
-            organization: reporterRes.data.organization || '',
-            bio: reporterRes.data.bio || '',
-            portfolioUrl: reporterRes.data.portfolioUrl || '',
-          });
-        }
         const bookmarkList = bookmarkRes.data || [];
         setBookmarks(bookmarkList.slice(0, 3));
         setStats({
