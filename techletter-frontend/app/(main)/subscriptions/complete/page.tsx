@@ -1,13 +1,15 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import api from '@/lib/api';
 
 const planNames: Record<string, string> = {
   daily: '데일리 플랜',
   weekly: '위클리 플랜',
   all: '올인원 플랜',
+  premium: '프리미엄 플랜',
 };
 
 const planDescriptions: Record<string, string> = {
@@ -20,6 +22,37 @@ function CompleteContent() {
   const searchParams = useSearchParams();
   const plan = searchParams.get('plan') || 'daily';
   const price = Number(searchParams.get('price')) || 2900;
+  const [subscription, setSubscription] = useState<{ status: string; planType: string | null } | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    api.get('/subscriptions/me')
+      .then((res) => setSubscription(res.data))
+      .catch(() => setSubscription(null))
+      .finally(() => setChecking(false));
+  }, []);
+
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-950 text-sm text-gray-500">
+        구독 상태 확인 중...
+      </div>
+    );
+  }
+
+  if (subscription?.status !== 'ACTIVE') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 px-4 text-center text-white">
+        <h1 className="mb-2 text-xl font-bold">구독 상태를 확인하지 못했어요</h1>
+        <p className="mb-6 text-sm leading-relaxed text-gray-400">
+          결제가 완료되지 않았거나 백엔드 연결이 끊긴 상태입니다. 마이페이지에서 현재 구독 상태를 다시 확인해주세요.
+        </p>
+        <Link href="/mypage" className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white">
+          마이페이지로 이동
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center px-4">
@@ -36,14 +69,16 @@ function CompleteContent() {
       </div>
 
       <h1 className="text-2xl font-bold mb-2 text-center">구독 완료! 🎉</h1>
-      <p className="text-gray-400 text-sm text-center mb-8 leading-relaxed">{planDescriptions[plan]}</p>
+      <p className="text-gray-400 text-sm text-center mb-8 leading-relaxed">
+        {planDescriptions[plan] || '프리미엄 콘텐츠와 기자 리포트를 이용할 수 있는 구독이 활성화되었습니다.'}
+      </p>
 
       <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-8">
         <div className="text-xs text-gray-500 mb-4 font-medium uppercase tracking-wider">구독 정보</div>
         <div className="flex flex-col gap-3">
           <div className="flex justify-between">
             <span className="text-sm text-gray-400">플랜</span>
-            <span className="text-sm font-medium text-white">{planNames[plan]}</span>
+            <span className="text-sm font-medium text-white">{planNames[subscription.planType || plan] || '프리미엄 플랜'}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-sm text-gray-400">첫 달</span>

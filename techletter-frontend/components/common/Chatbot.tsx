@@ -69,12 +69,13 @@ export default function Chatbot() {
         ...prev,
         { role: 'bot', text: data.answer ?? data.reply ?? '응답을 받지 못했어요.', time: getNow() },
       ]);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : '';
       setMessages((prev) => [
         ...prev,
         { 
           role: 'bot', 
-          text: error.message === '로그인이 필요하거나 권한이 없습니다.' 
+          text: errorMessage === '로그인이 필요하거나 권한이 없습니다.' 
             ? '로그인 후 이용해 주세요! 🔐' 
             : '서버와 연결할 수 없어요. 잠시 후 다시 시도해 주세요 😢', 
           time: getNow() 
@@ -283,7 +284,12 @@ export default function Chatbot() {
       <div
         className="tl-chat"
         /* 하단 네비게이션 바(보통 높이 60px 내외)와 겹치지 않게 bottom을 90으로 상향 */
-        style={{ position: 'fixed', bottom: 90, right: 24, zIndex: 9999 }}
+        style={{
+          position: 'fixed',
+          bottom: 'calc(110px + env(safe-area-inset-bottom))',
+          right: 24,
+          zIndex: 9999,
+        }}
       >
         {/* ── 챗봇 창 ── */}
         {isOpen && (

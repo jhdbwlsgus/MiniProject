@@ -2,16 +2,36 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import api, { getImageUrl } from '@/lib/api';
 
 interface News {
   id: number;
   title: string;
   content: string;
-  thumbnailUrl: string;
+  isPremium?: boolean;
+  contentLocked?: boolean;
+  hasPremiumAccess?: boolean;
+  requiredPlan?: string | null;
+  premiumContent?: {
+    keyPoints?: string[];
+    editorComment?: string;
+    relatedLinks?: Array<{ title?: string; url?: string }>;
+  } | null;
+  thumbnailUrl: string | null;
   viewCount: number;
+  likeCount: number;
+  shareCount: number;
   createdAt: string;
-  author: { nickname: string };
+  author: { id: number; nickname: string };
+}
+
+interface ReporterProfile {
+  id: number;
+  slug: string;
+  displayName: string;
+  headline?: string | null;
+  profileImage?: string | null;
 }
 
 interface Comment {
@@ -23,6 +43,8 @@ interface Comment {
   user: { nickname: string };
 }
 
+const formatNumber = (value: number | undefined) => (value ?? 0).toLocaleString();
+
 export default function NewsDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -31,6 +53,7 @@ export default function NewsDetailPage() {
   const [commentText, setCommentText] = useState('');
   const [liked, setLiked] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
+  const [reporterProfile, setReporterProfile] = useState<ReporterProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,9 +70,17 @@ export default function NewsDetailPage() {
         ]);
 
         if (!alreadyViewed) localStorage.setItem(viewedKey, 'true');
+        if (localStorage.getItem('accessToken')) {
+          api.post(`/news/${id}/view-history`).catch(() => undefined);
+        }
 
         setNews(newsRes.data);
         setComments(commentsRes.data);
+        if (newsRes.data.author?.id) {
+          api.get(`/reporters/user/${newsRes.data.author.id}`)
+            .then((res) => setReporterProfile(res.data))
+            .catch(() => setReporterProfile(null));
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -63,6 +94,7 @@ export default function NewsDetailPage() {
     try {
       const res = await api.post(`/news/${id}/likes`);
       setLiked(res.data.liked);
+      setNews((prev) => prev ? { ...prev, likeCount: res.data.likeCount ?? prev.likeCount } : prev);
     } catch {
       router.push('/login');
     }
@@ -77,129 +109,212 @@ export default function NewsDetailPage() {
     }
   };
 
+  const handleShare = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: news?.title, url: window.location.href });
+      } else {
+        await navigator.clipboard?.writeText(window.location.href);
+        alert('링크가 복사되었습니다.');
+      }
+      const res = await api.post(`/news/${id}/share`);
+      setNews((prev) => prev ? { ...prev, shareCount: res.data.shareCount ?? prev.shareCount } : prev);
+    } catch (error) {
+      if ((error as Error)?.name !== 'AbortError') console.error(error);
+    }
+  };
+
   const handleComment = async () => {
     if (!commentText.trim()) return;
     try {
       const res = await api.post(`/news/${id}/comments`, { content: commentText });
-      setComments([...comments, res.data]);
+      setComments((prev) => [...prev, res.data]);
       setCommentText('');
     } catch {
       router.push('/login');
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center transition-colors duration-200">
-      <div className="text-gray-500 dark:text-gray-400">로딩 중...</div>
-    </div>
-  );
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center transition-colors duration-200">
+        <div className="text-gray-500 dark:text-gray-400">로딩 중...</div>
+      </div>
+    );
+  }
 
-  if (!news) return (
-    <div className="min-h-screen flex items-center justify-center transition-colors duration-200">
-      <div className="text-gray-500 dark:text-gray-400">뉴스를 찾을 수 없습니다.</div>
-    </div>
-  );
+  if (!news) {
+    return (
+      <div className="flex min-h-screen items-center justify-center transition-colors duration-200">
+        <div className="text-gray-500 dark:text-gray-400">뉴스를 찾을 수 없습니다.</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen transition-colors duration-200 pb-20">
-      {/* 헤더 */}
-      <header className="sticky top-0 z-50 bg-gray-950 border-b border-gray-800">
-        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
-          <button onClick={() => router.back()} className="text-gray-400 hover:text-white transition">
+    <div className="min-h-screen pb-20 transition-colors duration-200">
+      <header className="sticky top-0 z-50 border-b border-gray-800 bg-gray-950">
+        <div className="mx-auto flex h-14 max-w-3xl items-center gap-3 px-4">
+          <button onClick={() => router.back()} className="text-gray-400 transition hover:text-white" aria-label="뒤로가기">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
-          <span className="flex-1 text-sm font-medium truncate">뉴스 상세</span>
-          <button onClick={() => navigator.share?.({ title: news.title, url: window.location.href })}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          <span className="flex-1 truncate text-sm font-medium">뉴스 상세</span>
+          <button onClick={handleShare} aria-label="공유" className="text-gray-400 transition hover:text-white">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
           </button>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-5">
-        {/* 제목 */}
+      <main className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6">
         <div>
-          <h1 className="text-xl font-bold leading-tight mb-2">{news.title}</h1>
-          <div className="flex items-center gap-3 text-xs text-gray-500">
-            <span>👁 {news.viewCount}</span>
+          <h1 className="mb-3 text-xl font-bold leading-tight">{news.title}</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+            <span>조회 {formatNumber(news.viewCount)}</span>
+            <span>좋아요 {formatNumber(news.likeCount)}</span>
+            <span>댓글 {formatNumber(comments.length)}</span>
+            <span>공유 {formatNumber(news.shareCount)}</span>
             <span>{new Date(news.createdAt).toLocaleDateString('ko-KR')}</span>
-            <span>{news.author?.nickname}</span>
+            {reporterProfile ? (
+              <Link href={`/reporters/${reporterProfile.slug}`} className="font-semibold text-blue-400 hover:text-blue-300">
+                {news.author?.nickname}
+              </Link>
+            ) : (
+              <span>{news.author?.nickname}</span>
+            )}
           </div>
         </div>
 
-        {/* 대표 이미지 */}
+        {reporterProfile && (
+          <Link href={`/reporters/${reporterProfile.slug}`} className="flex items-center gap-3 rounded-2xl border border-blue-900/40 bg-blue-950/30 p-4 transition hover:border-blue-700">
+            {getImageUrl(reporterProfile.profileImage) ? (
+              <img src={getImageUrl(reporterProfile.profileImage)} alt="" className="h-11 w-11 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                {reporterProfile.displayName[0]}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-white">{reporterProfile.displayName}</p>
+              <p className="mt-1 line-clamp-1 text-xs text-blue-100/80">
+                {reporterProfile.headline || '기자의 피드와 작성 기사를 확인해보세요.'}
+              </p>
+            </div>
+            <span className="text-xs font-semibold text-blue-300">프로필</span>
+          </Link>
+        )}
+
         {getImageUrl(news.thumbnailUrl) ? (
-          <img src={getImageUrl(news.thumbnailUrl)} alt={news.title}
-            className="w-full h-48 object-cover rounded-xl" />
+          <img src={getImageUrl(news.thumbnailUrl)} alt={news.title} className="h-48 w-full rounded-xl object-cover" />
         ) : (
-          <div className="w-full h-48 bg-gray-800 rounded-xl flex items-center justify-center text-gray-500 text-sm border border-gray-700">
+          <div className="flex h-48 w-full items-center justify-center rounded-xl border border-gray-700 bg-gray-800 text-sm text-gray-500">
             대표 이미지 없음
           </div>
         )}
 
-        {/* 본문 */}
-        <div className="text-sm text-gray-300 leading-relaxed prose prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: news.content }} />
+        <div
+          className="prose prose-invert max-w-none text-sm leading-relaxed text-gray-300"
+          dangerouslySetInnerHTML={{ __html: news.content }}
+        />
 
-        {/* 인터랙션 */}
-        <div className="flex items-center justify-between py-3 border-y border-gray-800">
-          <div className="flex gap-5">
-            <button onClick={handleLike}
-              className={`flex items-center gap-1.5 text-sm transition ${liked ? 'text-red-400' : 'text-gray-400 hover:text-white'}`}>
+        {news.contentLocked ? (
+          <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-5">
+            <div className="mb-2 inline-flex rounded-full bg-yellow-500/20 px-2.5 py-1 text-xs font-bold text-yellow-300">
+              프리미엄 전용
+            </div>
+            <h2 className="text-base font-bold text-white">전체 기사는 프리미엄 구독자에게 공개됩니다.</h2>
+            <p className="mt-2 text-sm leading-relaxed text-gray-300">
+              프리미엄 플랜을 구독하면 전체 본문, 기자 리포트, 구독자 전용 핵심 포인트를 바로 확인할 수 있습니다.
+            </p>
+            <Link href="/subscriptions/plans" className="mt-4 inline-flex rounded-xl bg-yellow-500 px-4 py-2.5 text-sm font-bold text-gray-950 transition hover:bg-yellow-400">
+              프리미엄 구독 보기
+            </Link>
+          </div>
+        ) : news.premiumContent && (
+          <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-5">
+            <div className="mb-3 text-xs font-bold text-yellow-300">프리미엄 리포트</div>
+            {!!news.premiumContent.keyPoints?.length && (
+              <div className="space-y-2">
+                {news.premiumContent.keyPoints.map((point, index) => (
+                  <div key={`${point}-${index}`} className="flex gap-2 text-sm text-gray-200">
+                    <span className="font-bold text-yellow-300">{index + 1}.</span>
+                    <span>{point}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {news.premiumContent.editorComment && (
+              <p className="mt-4 border-l-2 border-yellow-400 pl-3 text-sm italic text-gray-300">{news.premiumContent.editorComment}</p>
+            )}
+            {!!news.premiumContent.relatedLinks?.length && (
+              <div className="mt-4 flex flex-col gap-2">
+                {news.premiumContent.relatedLinks.map((link, index) => (
+                  <a key={`${link.url}-${index}`} href={link.url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-yellow-300 hover:text-yellow-200">
+                    {link.title || link.url}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between border-y border-gray-800 py-3">
+          <div className="flex flex-wrap gap-4">
+            <button
+              onClick={handleLike}
+              className={`flex items-center gap-1.5 text-sm transition ${liked ? 'text-red-400' : 'text-gray-400 hover:text-white'}`}
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill={liked ? '#f87171' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              좋아요
+              좋아요 {formatNumber(news.likeCount)}
             </button>
-            <button className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition">
+            <span className="flex items-center gap-1.5 text-sm text-gray-400">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              댓글 {comments.length}
-            </button>
-            <button onClick={() => navigator.share?.({ title: news.title, url: window.location.href })}
-              className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition">
+              댓글 {formatNumber(comments.length)}
+            </span>
+            <button onClick={handleShare} className="flex items-center gap-1.5 text-sm text-gray-400 transition hover:text-white">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-              공유
+              공유 {formatNumber(news.shareCount)}
             </button>
           </div>
-          <button onClick={handleBookmark} className={`transition ${bookmarked ? 'text-blue-400' : 'text-gray-400 hover:text-white'}`}>
+          <button onClick={handleBookmark} className={`transition ${bookmarked ? 'text-blue-400' : 'text-gray-400 hover:text-white'}`} aria-label="북마크">
             <svg width="18" height="18" viewBox="0 0 24 24" fill={bookmarked ? '#60a5fa' : 'none'} stroke="currentColor" strokeWidth="2"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
           </button>
         </div>
 
-        {/* 댓글 */}
         <section>
-          <h3 className="font-bold text-sm mb-4">댓글 {comments.length}개</h3>
+          <h3 className="mb-4 text-sm font-bold">댓글 {formatNumber(comments.length)}개</h3>
           <div className="flex flex-col gap-0">
             {comments.map((comment) => (
-              <div key={comment.id}
-                className={`py-4 border-b border-gray-800 ${comment.isBest ? 'bg-blue-950 px-3 rounded-xl border-blue-800 mb-2' : ''}`}>
-                {comment.isBest && (
-                  <div className="flex items-center gap-1 mb-2">
-                    <span className="text-xs text-blue-400 font-medium">⭐ 베스트</span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-6 h-6 rounded-full bg-blue-900 flex items-center justify-center text-xs text-blue-300 font-medium">
+              <div
+                key={comment.id}
+                className={`border-b border-gray-800 py-4 ${comment.isBest ? 'mb-2 rounded-xl border-blue-800 bg-blue-950 px-3' : ''}`}
+              >
+                {comment.isBest && <div className="mb-2 text-xs font-medium text-blue-400">베스트 댓글</div>}
+                <div className="mb-1 flex items-center gap-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-900 text-xs font-medium text-blue-300">
                     {comment.user?.nickname?.[0]}
                   </div>
                   <span className="text-xs font-medium text-gray-300">{comment.user?.nickname}</span>
                   <span className="text-xs text-gray-600">{new Date(comment.createdAt).toLocaleDateString('ko-KR')}</span>
                 </div>
-                <p className="text-sm text-gray-300 leading-relaxed">{comment.content}</p>
-                <div className="flex items-center gap-1 mt-2 text-xs text-gray-500">
+                <p className="text-sm leading-relaxed text-gray-300">{comment.content}</p>
+                <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                  {comment.likeCount}
+                  {formatNumber(comment.likeCount)}
                 </div>
               </div>
             ))}
           </div>
 
-          {/* 댓글 입력 */}
-          <div className="flex gap-2 mt-4 items-center">
-            <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)}
+          <div className="mt-4 flex items-center gap-2">
+            <input
+              type="text"
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
               placeholder="댓글을 남겨보세요..."
-              className="flex-1 bg-gray-800 rounded-full px-4 py-2.5 text-sm text-gray-200 placeholder-gray-500 outline-none focus:ring-1 focus:ring-blue-500"
+              className="flex-1 rounded-full bg-gray-800 px-4 py-2.5 text-sm text-gray-200 outline-none placeholder:text-gray-500 focus:ring-1 focus:ring-blue-500"
               onKeyDown={(e) => e.key === 'Enter' && handleComment()}
             />
-            <button onClick={handleComment}
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2.5 text-sm font-medium transition flex-shrink-0">
+            <button onClick={handleComment} className="shrink-0 rounded-full bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700">
               등록
             </button>
           </div>

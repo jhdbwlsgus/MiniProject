@@ -56,6 +56,28 @@ export class News {
   @Column({ nullable: true })
   ogImage!: string;
 
+  @Column({ type: 'simple-json', nullable: true })
+  sourceReferences!: Array<{
+    title?: string;
+    url?: string;
+    source?: string;
+    type?: string;
+    memo?: string;
+  }> | null;
+
+  @Column({ default: false })
+  isPremium!: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  premiumExcerpt!: string | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  premiumContent!: {
+    keyPoints?: string[];
+    editorComment?: string;
+    relatedLinks?: Array<{ title?: string; url?: string }>;
+  } | null;
+
   @Column({ type: 'enum', enum: NewsStatus, default: NewsStatus.DRAFT })
   status!: NewsStatus;
 
@@ -67,6 +89,18 @@ export class News {
 
   @Column({ default: 0 })
   shareCount!: number;
+
+  @Column({ default: false })
+  homeMain!: boolean;
+
+  @Column({ default: false })
+  homeRecommended!: boolean;
+
+  @Column({ default: false })
+  homeUrgent!: boolean;
+
+  @Column({ type: 'int', default: 0 })
+  homeOrder!: number;
 
   @Column({ nullable: true })
   scheduledAt!: Date;

@@ -5,14 +5,14 @@ import { OAuthErrorUser } from './google-oauth.guard';
 @Injectable()
 export class NaverLoginGuard extends AuthGuard('naver') {
   getAuthenticateOptions() {
-    return { state: 'login' };
+    return { state: 'login', authType: 'reauthenticate' };
   }
 }
 
 @Injectable()
 export class NaverSignupGuard extends AuthGuard('naver') {
   getAuthenticateOptions() {
-    return { state: 'signup' };
+    return { state: 'signup', authType: 'reprompt' };
   }
 }
 

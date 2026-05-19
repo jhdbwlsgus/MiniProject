@@ -14,4 +14,9 @@ export class SearchController {
   ) {
     return this.searchService.search(q, +page, +limit);
   }
+
+  @Get('preview')
+  preview(@Query('q') q: string, @Query('limit') limit = '5') {
+    return this.searchService.preview(q, +limit || 5);
+  }
 }

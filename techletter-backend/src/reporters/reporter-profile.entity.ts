@@ -13,6 +13,8 @@ export enum ReporterStatus {
   PENDING = 'pending',
   APPROVED = 'approved',
   REJECTED = 'rejected',
+  SUSPENDED = 'suspended',
+  MORE_INFO_REQUIRED = 'more_info_required',
 }
 
 @Entity('reporter_profiles')
@@ -27,26 +29,77 @@ export class ReporterProfile {
   @JoinColumn({ name: 'userId' })
   user!: User;
 
-  @Column()
-  realName!: string;
+  @Column({ unique: true })
+  slug!: string;
 
   @Column()
-  organization!: string;
+  displayName!: string;
 
-  @Column({ type: 'text' })
-  bio!: string;
-
-  @Column({ type: 'varchar', length: 500, nullable: true })
-  portfolioUrl!: string | null;
-
-  @Column({ type: 'enum', enum: ReporterStatus, default: ReporterStatus.PENDING })
-  status!: ReporterStatus;
+  @Column({ type: 'varchar', nullable: true })
+  headline!: string | null;
 
   @Column({ type: 'text', nullable: true })
-  rejectedReason!: string | null;
+  bio!: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  profileImage!: string | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  specialties!: string[] | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  categoryIds!: number[] | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  portfolioUrl!: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  blogUrl!: string | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  plannedTopics!: string[] | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  githubUrl!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  previousExperience!: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  sampleArticleType!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  sampleArticleText!: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  sampleArticleUrl!: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  sampleArticleFileUrl!: string | null;
+
+  @Column({ type: 'varchar', default: ReporterStatus.PENDING })
+  status!: ReporterStatus;
 
   @Column({ type: 'timestamp', nullable: true })
   approvedAt!: Date | null;
+
+  @Column({ type: 'int', default: 1 })
+  level!: number;
+
+  @Column({ type: 'text', nullable: true })
+  reviewMessage!: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  reviewedAt!: Date | null;
+
+  @Column({ type: 'int', nullable: true })
+  reviewedById!: number | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  realName!: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  organization!: string | null;
 
   @CreateDateColumn()
   createdAt!: Date;

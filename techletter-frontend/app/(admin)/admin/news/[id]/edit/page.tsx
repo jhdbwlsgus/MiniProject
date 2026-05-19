@@ -111,7 +111,7 @@ export default function AdminNewsEditPage() {
   );
 
   return (
-    <div className="min-h-screen pb-10 transition-colors duration-200">
+    <div className="min-h-screen pb-28 transition-colors duration-200">
       <header className="sticky top-0 z-50 bg-white dark:bg-[#171717] border-b border-gray-200 dark:border-gray-800 transition-colors duration-200">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
           <button onClick={() => router.back()} className="text-gray-400 hover:text-white transition">

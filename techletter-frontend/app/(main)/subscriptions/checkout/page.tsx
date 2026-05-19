@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
@@ -23,6 +23,16 @@ function CheckoutForm() {
   const [cardHolder, setCardHolder] = useState('');
   const [agree, setAgree] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    api.get('/subscriptions/me')
+      .then((res) => {
+        if (res.data?.status === 'ACTIVE' && res.data?.planType === plan) {
+          router.replace('/mypage');
+        }
+      })
+      .catch(() => undefined);
+  }, [plan, router]);
 
   const handleCardNumber = (v: string) => {
     const raw = v.replace(/\D/g, '').slice(0, 16);
@@ -85,7 +95,7 @@ function CheckoutForm() {
   const cardBrand = getCardBrand();
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white pb-40">
+    <div className="min-h-screen bg-gray-950 text-white pb-[calc(240px+env(safe-area-inset-bottom))]">
       <header className="sticky top-0 z-50 bg-gray-950 border-b border-gray-800">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
           <Link href="/subscriptions/plans">
@@ -125,7 +135,7 @@ function CheckoutForm() {
         {/* 선택한 플랜 요약 */}
         <div className="bg-blue-600/10 border border-blue-600/30 rounded-2xl p-4 flex justify-between items-center">
           <div>
-            <div className="text-sm text-blue-400 font-medium">{planNames[plan]}</div>
+            <div className="text-sm text-blue-400 font-medium">{planNames[plan] || '프리미엄 플랜'}</div>
             <div className="text-xs text-gray-400 mt-0.5">첫 달 무료 체험 후 자동 결제</div>
           </div>
           <div className="text-right">
@@ -234,7 +244,7 @@ function CheckoutForm() {
       </div>
 
       {/* 하단 결제 버튼 */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gray-950 border-t border-gray-800 px-4 py-4">
+      <div className="fixed bottom-[calc(88px+env(safe-area-inset-bottom))] left-0 right-0 z-40 bg-gray-950 border-t border-gray-800 px-4 py-4">
         <div className="max-w-3xl mx-auto">
           <button onClick={handleSubmit} disabled={!isFormValid || loading}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-xl py-3.5 text-sm font-bold transition flex items-center justify-center gap-2">

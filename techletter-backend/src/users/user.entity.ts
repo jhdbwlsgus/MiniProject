@@ -36,7 +36,21 @@ export class User {
   @Column({ nullable: true })
   profileImage!: string;
 
-  @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
+  @Column({ type: 'text', nullable: true })
+  bio!: string | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  snsLinks!: {
+    website?: string;
+    github?: string;
+    linkedin?: string;
+    x?: string;
+  } | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  interestCategoryIds!: number[] | null;
+
+  @Column({ type: 'varchar', default: UserRole.USER })
   role!: UserRole;
 
   @Column({ type: 'enum', enum: SocialProvider, default: SocialProvider.EMAIL })

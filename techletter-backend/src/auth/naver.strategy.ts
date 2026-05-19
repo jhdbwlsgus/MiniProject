@@ -31,6 +31,10 @@ export class NaverStrategy extends PassportStrategy(OAuth2Strategy, 'naver') {
     });
   }
 
+  authorizationParams(options: { authType?: string }) {
+    return options.authType ? { auth_type: options.authType } : {};
+  }
+
   userProfile(accessToken: string, done: (error?: unknown, profile?: NaverProfile) => void) {
     fetch('https://openapi.naver.com/v1/nid/me', {
       headers: {

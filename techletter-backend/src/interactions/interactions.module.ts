@@ -11,11 +11,13 @@ import { LikesController } from './likes.controller';
 import { CommentsController } from './comments.controller';
 import { BookmarksController } from './bookmarks.controller';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Like, Comment, Bookmark, News]),
     AuthModule,
+    NotificationsModule,
   ],
   providers: [LikesService, CommentsService, BookmarksService],
   controllers: [LikesController, CommentsController, BookmarksController],

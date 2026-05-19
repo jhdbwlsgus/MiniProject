@@ -1,184 +1,123 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import AdminNavTabs from '@/components/admin/AdminNavTabs';
 import api from '@/lib/api';
+
+type ReporterStatus = 'pending' | 'approved' | 'rejected' | 'suspended' | 'more_info_required';
 
 interface ReporterProfile {
   id: number;
-  realName: string;
-  organization: string;
-  bio: string;
-  portfolioUrl?: string | null;
-  status: 'pending' | 'approved' | 'rejected';
-  rejectedReason?: string | null;
-  approvedAt?: string | null;
+  displayName: string;
+  headline?: string | null;
+  status: ReporterStatus;
+  level: number;
   createdAt: string;
-  user: {
-    email: string;
-    nickname: string;
-    role: string;
-  };
+  approvedAt?: string | null;
+  user?: { email?: string; nickname?: string };
 }
 
-const statusLabel: Record<ReporterProfile['status'], { label: string; color: string }> = {
-  pending: { label: '승인 대기', color: 'text-yellow-400' },
-  approved: { label: '승인 완료', color: 'text-emerald-400' },
-  rejected: { label: '반려', color: 'text-red-400' },
+const statusLabel: Record<ReporterStatus, string> = {
+  pending: '심사중',
+  approved: '승인 기자',
+  rejected: '반려',
+  suspended: '정지',
+  more_info_required: '추가 정보 요청',
 };
 
 export default function AdminReportersPage() {
-  const router = useRouter();
   const [reporters, setReporters] = useState<ReporterProfile[]>([]);
-  const [status, setStatus] = useState<'all' | ReporterProfile['status']>('pending');
+  const [filter, setFilter] = useState<ReporterStatus | 'all'>('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchReporters();
-  }, [status]);
+    api.get<ReporterProfile[]>('/reporters/admin')
+      .then((res) => setReporters(res.data || []))
+      .catch(() => setReporters([]))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const fetchReporters = async () => {
-    setLoading(true);
-    try {
-      const query = status === 'all' ? '' : `?status=${status}`;
-      const res = await api.get(`/reporters/admin${query}`);
-      setReporters(res.data);
-    } catch (err: any) {
-      if (err.response?.status === 403) alert('관리자만 접근할 수 있습니다.');
-      router.push('/');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const filtered = useMemo(() => (
+    filter === 'all' ? reporters : reporters.filter((reporter) => reporter.status === filter)
+  ), [reporters, filter]);
 
-  const approve = async (id: number) => {
-    if (!confirm('이 회원에게 기자 권한을 부여할까요?')) return;
-    await api.post(`/reporters/admin/${id}/approve`);
-    fetchReporters();
-  };
-
-  const reject = async (id: number) => {
-    const reason = prompt('반려 사유를 입력하세요. 빈칸으로 둘 수도 있습니다.') || '';
-    await api.post(`/reporters/admin/${id}/reject`, { reason });
-    fetchReporters();
-  };
+  const pendingCount = reporters.filter((reporter) => reporter.status === 'pending' || reporter.status === 'more_info_required').length;
+  const approvedCount = reporters.filter((reporter) => reporter.status === 'approved').length;
 
   return (
-    <div className="min-h-screen pb-10 transition-colors duration-200">
-      <header className="sticky top-0 z-50 border-b border-gray-800 bg-gray-950">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <button onClick={() => router.push('/admin')} className="text-gray-400 transition hover:text-white">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="15 18 9 12 15 6" />
-              </svg>
-            </button>
-            <span className="text-base font-bold text-white">기자 신청 관리</span>
-            <span className="text-xs text-gray-500">총 {reporters.length}건</span>
-          </div>
-          <Link href="/admin/news" className="text-sm text-blue-400 transition hover:text-blue-300">
-            뉴스 관리
-          </Link>
+    <div className="min-h-screen bg-gray-950 pb-24 text-white">
+      <header className="sticky top-0 z-40 border-b border-gray-800 bg-gray-950">
+        <div className="mx-auto max-w-5xl px-4 py-4">
+          <p className="text-xs font-semibold text-blue-400">ADMIN</p>
+          <h1 className="mt-1 text-xl font-bold">기자 관리</h1>
+          <p className="mt-1 text-sm text-gray-400">기자 신청, 승인 기자, 정지 상태를 분리해서 관리합니다.</p>
         </div>
+        <AdminNavTabs />
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <div className="mb-5 flex flex-wrap gap-2">
-          {(['pending', 'approved', 'rejected', 'all'] as const).map((item) => (
-            <button
-              key={item}
-              onClick={() => setStatus(item)}
-              className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                status === item
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-              }`}
-            >
-              {item === 'all' ? '전체' : statusLabel[item].label}
-            </button>
-          ))}
+      <main className="mx-auto max-w-5xl px-4 py-5">
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <Metric label="전체 기자 프로필" value={reporters.length} />
+          <Metric label="검토 필요" value={pendingCount} />
+          <Metric label="승인 기자" value={approvedCount} />
         </div>
 
-        {loading ? (
-          <div className="flex flex-col gap-3">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="h-24 animate-pulse rounded-lg bg-gray-800" />
-            ))}
+        <section className="rounded-2xl border border-gray-800 bg-gray-900 p-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              {(['all', 'pending', 'approved', 'more_info_required', 'rejected', 'suspended'] as const).map((item) => (
+                <button
+                  key={item}
+                  onClick={() => setFilter(item)}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${filter === item ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-700 text-gray-400'}`}
+                >
+                  {item === 'all' ? '전체' : statusLabel[item]}
+                </button>
+              ))}
+            </div>
+            <Link href="/admin/reporter-requests" className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700">
+              신청 심사 열기
+            </Link>
           </div>
-        ) : reporters.length === 0 ? (
-          <div className="rounded-lg border border-gray-800 py-16 text-center text-sm text-gray-500">
-            표시할 기자 신청이 없습니다.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-800 text-left text-gray-500">
-                  <th className="px-2 py-3">신청자</th>
-                  <th className="px-2 py-3">소속</th>
-                  <th className="px-2 py-3">소개</th>
-                  <th className="px-2 py-3">상태</th>
-                  <th className="px-2 py-3">신청일</th>
-                  <th className="px-2 py-3">관리</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reporters.map((reporter) => (
-                  <tr key={reporter.id} className="border-b border-gray-800 align-top transition hover:bg-gray-900">
-                    <td className="px-2 py-3">
-                      <div className="font-medium text-gray-100">{reporter.realName}</div>
-                      <div className="mt-0.5 text-xs text-gray-500">{reporter.user?.email}</div>
-                      <div className="mt-0.5 text-xs text-gray-500">닉네임: {reporter.user?.nickname}</div>
-                    </td>
-                    <td className="px-2 py-3 text-gray-300">{reporter.organization}</td>
-                    <td className="max-w-md px-2 py-3">
-                      <p className="line-clamp-3 text-gray-400">{reporter.bio}</p>
-                      {reporter.portfolioUrl && (
-                        <a
-                          href={reporter.portfolioUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-2 inline-block text-xs text-blue-400 hover:underline"
-                        >
-                          포트폴리오 보기
-                        </a>
-                      )}
-                      {reporter.rejectedReason && (
-                        <div className="mt-2 text-xs text-red-400">반려 사유: {reporter.rejectedReason}</div>
-                      )}
-                    </td>
-                    <td className={`px-2 py-3 text-xs font-medium ${statusLabel[reporter.status].color}`}>
-                      {statusLabel[reporter.status].label}
-                    </td>
-                    <td className="px-2 py-3 text-xs text-gray-500">
-                      {new Date(reporter.createdAt).toLocaleDateString('ko-KR')}
-                    </td>
-                    <td className="px-2 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => approve(reporter.id)}
-                          disabled={reporter.status === 'approved'}
-                          className="text-xs text-emerald-400 transition hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          승인
-                        </button>
-                        <button
-                          onClick={() => reject(reporter.id)}
-                          disabled={reporter.status === 'rejected'}
-                          className="text-xs text-red-400 transition hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          반려
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+
+          {loading ? (
+            <div className="py-16 text-center text-sm text-gray-500">불러오는 중...</div>
+          ) : filtered.length === 0 ? (
+            <div className="py-16 text-center text-sm text-gray-500">표시할 기자가 없습니다.</div>
+          ) : (
+            <div className="grid gap-3">
+              {filtered.map((reporter) => (
+                <article key={reporter.id} className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold">{reporter.displayName}</p>
+                      <p className="mt-1 text-xs text-gray-500">{reporter.headline || reporter.user?.email || '-'}</p>
+                    </div>
+                    <span className="rounded-full bg-gray-800 px-2.5 py-1 text-[11px] font-semibold text-gray-300">
+                      {statusLabel[reporter.status]}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-gray-500 sm:grid-cols-3">
+                    <span>이메일 {reporter.user?.email || '-'}</span>
+                    <span>레벨 {reporter.level || 1}</span>
+                    <span>신청일 {new Date(reporter.createdAt).toLocaleDateString('ko-KR')}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4">
+      <p className="text-2xl font-bold">{value.toLocaleString()}</p>
+      <p className="mt-1 text-xs text-gray-500">{label}</p>
     </div>
   );
 }

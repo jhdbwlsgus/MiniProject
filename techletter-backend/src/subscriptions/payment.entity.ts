@@ -54,7 +54,7 @@ export class Payment {
 
   @Column({
     type: 'enum',
-    enum: ['daily', 'weekly', 'all'],
+    enum: ['daily', 'weekly', 'all', 'premium'],
     nullable: true,
   })
   planType!: string | null;
