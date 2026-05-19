@@ -2,12 +2,17 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Comment } from './entities/comment.entity';
+import { News } from '../news/news.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class CommentsService {
   constructor(
     @InjectRepository(Comment)
     private commentRepository: Repository<Comment>,
+    @InjectRepository(News)
+    private newsRepository: Repository<News>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findByNews(newsId: number) {
@@ -20,7 +25,12 @@ export class CommentsService {
 
   async create(content: string, userId: number, newsId: number) {
     const comment = this.commentRepository.create({ content, userId, newsId });
-    return this.commentRepository.save(comment);
+    const saved = await this.commentRepository.save(comment);
+    const news = await this.newsRepository.findOne({ where: { id: newsId } });
+    if (news) {
+      await this.notificationsService.notifyArticleComment(news, userId, content);
+    }
+    return saved;
   }
 
   async update(id: number, content: string, userId: number) {

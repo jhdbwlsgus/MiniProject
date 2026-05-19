@@ -170,7 +170,7 @@ export default function SendsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white pb-10">
+    <div className="min-h-screen bg-gray-950 text-white pb-28">
       <header className="sticky top-0 z-50 bg-gray-950 border-b border-gray-800">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">

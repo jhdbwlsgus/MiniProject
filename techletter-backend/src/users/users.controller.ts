@@ -1,7 +1,8 @@
 // 상단 import 부분에 Patch, Delete 추가
-import { Controller, Get, Put, Patch, Delete, Param, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Put, Patch, Delete, Param, Body, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { UserRole } from './user.entity';
 
 @Controller('users')
 export class UsersController {
@@ -19,9 +20,37 @@ export class UsersController {
     return this.usersService.getUserReport(req.user.id);
   }
 
+  @Get('admin')
+  @UseGuards(JwtAuthGuard)
+  listForAdmin(@Request() req: any) {
+    if (req.user.role !== UserRole.ADMIN) throw new ForbiddenException('관리자만 접근 가능합니다.');
+    return this.usersService.listForAdmin();
+  }
+
+  @Patch('admin/:id/role')
+  @UseGuards(JwtAuthGuard)
+  updateRoleForAdmin(@Request() req: any, @Param('id') id: string, @Body() body: { role: UserRole }) {
+    if (req.user.role !== UserRole.ADMIN) throw new ForbiddenException('관리자만 접근 가능합니다.');
+    return this.usersService.updateRoleForAdmin(req.user.id, +id, body.role);
+  }
+
   @Put('me')
   @UseGuards(JwtAuthGuard)
-  updateMe(@Request() req: any, @Body() body: { nickname?: string }) {
+  updateMe(
+    @Request() req: any,
+    @Body() body: {
+      nickname?: string;
+      profileImage?: string;
+      bio?: string;
+      snsLinks?: {
+        website?: string;
+        github?: string;
+        linkedin?: string;
+        x?: string;
+      };
+      interestCategoryIds?: number[];
+    },
+  ) {
     return this.usersService.updateUser(req.user.id, body);
   }
 

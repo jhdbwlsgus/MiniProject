@@ -4,6 +4,7 @@ import { UsersService } from '../users/users.service';
 import { SocialProvider } from '../users/user.entity';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 export interface SocialLoginUser {
   email: string;
@@ -18,6 +19,7 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async signup(dto: SignupDto) {
@@ -25,6 +27,15 @@ export class AuthService {
       email: dto.email,
       password: dto.password,
       nickname: dto.nickname,
+    });
+    await this.notificationsService.ensurePreferences(user.id, {
+      serviceTermsAgreed: dto.agreements?.serviceTermsAgreed ?? true,
+      privacyAgreed: dto.agreements?.privacyAgreed ?? true,
+      marketingAgreed: dto.agreements?.marketingAgreed ?? false,
+      emailEnabled: dto.agreements?.emailEnabled ?? true,
+      smsEnabled: dto.agreements?.smsEnabled ?? false,
+      kakaoEnabled: dto.agreements?.kakaoEnabled ?? false,
+      recommendationEnabled: dto.agreements?.recommendationEnabled ?? true,
     });
 
     const token = this.generateToken(user.id, user.email, user.role);

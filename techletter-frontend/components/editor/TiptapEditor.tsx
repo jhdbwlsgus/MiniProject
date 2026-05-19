@@ -19,6 +19,7 @@ import Superscript from '@tiptap/extension-superscript';
 import Subscript from '@tiptap/extension-subscript';
 import CharacterCount from '@tiptap/extension-character-count';
 import { useState, useEffect, useRef } from 'react';
+import api from '@/lib/api';
 
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -45,6 +46,13 @@ interface Props {
   content: string;
   onChange: (content: string) => void;
   onAutoSave?: (content: string) => void;
+  references?: Array<{
+    title?: string;
+    url?: string;
+    source?: string;
+    memo?: string;
+    type?: string;
+  }>;
 }
 
 const FONT_FAMILIES = [
@@ -67,7 +75,15 @@ const HEADING_OPTIONS = [
 
 const Divider = () => <div className="w-px bg-gray-600 mx-0.5 self-stretch" />;
 
-export default function TiptapEditor({ content, onChange, onAutoSave }: Props) {
+interface SpellIssue {
+  id: string;
+  original: string;
+  replacement: string;
+  message: string;
+  context: string;
+}
+
+export default function TiptapEditor({ content, onChange, onAutoSave, references = [] }: Props) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const [previewContent, setPreviewContent] = useState('');
@@ -75,6 +91,12 @@ export default function TiptapEditor({ content, onChange, onAutoSave }: Props) {
   const [autoSaved, setAutoSaved] = useState(false);
   const [fontSize, setFontSize] = useState('16');
   const [fontSizeInput, setFontSizeInput] = useState('16');
+  const [spellIssues, setSpellIssues] = useState<SpellIssue[]>([]);
+  const [showSpellPanel, setShowSpellPanel] = useState(false);
+  const [spellLoading, setSpellLoading] = useState(false);
+  const [spellError, setSpellError] = useState('');
+  const [rewriteLoading, setRewriteLoading] = useState<string | null>(null);
+  const [translateLoading, setTranslateLoading] = useState(false);
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
 
   const editor = useEditor({
@@ -226,6 +248,103 @@ export default function TiptapEditor({ content, onChange, onAutoSave }: Props) {
   const charCount = editor.storage.characterCount?.characters() ?? 0;
   const wordCount = editor.storage.characterCount?.words() ?? 0;
   const isInTable = editor.isActive('table');
+
+  const runSpellCheck = async () => {
+    const text = editor.getText();
+    setShowSpellPanel(true);
+    setSpellError('');
+
+    if (!text.trim()) {
+      setSpellIssues([]);
+      return;
+    }
+
+    try {
+      setSpellLoading(true);
+      const { data } = await api.post('/news/ai/spellcheck', { text });
+      const issues = Array.isArray(data.issues) ? data.issues : [];
+      setSpellIssues(
+        issues.map((issue: Omit<SpellIssue, 'id'>, index: number) => ({
+          id: `${index}-${issue.original}-${issue.replacement}`,
+          original: issue.original,
+          replacement: issue.replacement,
+          message: issue.message,
+          context: issue.context,
+        })),
+      );
+    } catch (err: any) {
+      setSpellIssues([]);
+      setSpellError(err.response?.data?.message || err.message || '맞춤법 검사 중 오류가 발생했습니다.');
+    } finally {
+      setSpellLoading(false);
+    }
+  };
+
+  const applySpellIssue = (issue: SpellIssue) => {
+    const html = editor.getHTML();
+    const nextHtml = html.replace(issue.original, issue.replacement);
+    editor.commands.setContent(nextHtml);
+    setSpellIssues((issues) => issues.filter((item) => item.id !== issue.id));
+  };
+
+  const rewriteSelection = async (mode: 'concise' | 'easy' | 'professional') => {
+    const { from, to, empty } = editor.state.selection;
+    if (empty) {
+      alert('다듬을 문장이나 문단을 먼저 선택해주세요.');
+      return;
+    }
+
+    const selectedText = editor.state.doc.textBetween(from, to, '\n').trim();
+    if (!selectedText) {
+      alert('선택한 영역에 텍스트가 없습니다.');
+      return;
+    }
+
+    try {
+      setRewriteLoading(mode);
+      const { data } = await api.post('/news/ai/rewrite-selection', {
+        text: selectedText,
+        mode,
+        references,
+      });
+      if (data.rewritten) {
+        editor.chain().focus().insertContent(data.rewritten).run();
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || err.message || '선택 문장 다듬기 중 오류가 발생했습니다.');
+    } finally {
+      setRewriteLoading(null);
+    }
+  };
+
+  const translateSelection = async (targetLanguage: 'ko' | 'en' | 'ja' | 'zh') => {
+    const { from, to, empty } = editor.state.selection;
+    if (empty) {
+      alert('번역할 문장이나 문단을 먼저 선택해주세요.');
+      return;
+    }
+
+    const selectedText = editor.state.doc.textBetween(from, to, '\n').trim();
+    if (!selectedText) {
+      alert('선택한 영역에 텍스트가 없습니다.');
+      return;
+    }
+
+    try {
+      setTranslateLoading(true);
+      const { data } = await api.post('/news/ai/translate-selection', {
+        text: selectedText,
+        targetLanguage,
+      });
+      if (data.translated) {
+        editor.chain().focus().insertContent(data.translated).run();
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || err.message || '선택 문장 번역 중 오류가 발생했습니다.');
+    } finally {
+      setTranslateLoading(false);
+    }
+  };
 
   return (
     <div className={`border border-gray-700 rounded-xl overflow-hidden flex flex-col bg-gray-900 ${isFullscreen ? 'fixed inset-0 z-50 rounded-none' : ''}`}>
@@ -420,6 +539,64 @@ export default function TiptapEditor({ content, onChange, onAutoSave }: Props) {
         <Btn onClick={() => { setPreviewContent(editor.getHTML()); setIsPreview(true); }} active={isPreview} title="미리보기">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
         </Btn>
+        <button
+          type="button"
+          title="맞춤법 검사"
+          onMouseDown={(e) => { e.preventDefault(); runSpellCheck(); }}
+          className={`h-7 rounded px-2 text-xs font-medium transition ${
+            showSpellPanel
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-300 hover:bg-gray-600 hover:text-white'
+          }`}
+        >
+          맞춤법
+        </button>
+        <button
+          type="button"
+          title="선택 문장을 간결하게 다듬기"
+          disabled={!!rewriteLoading}
+          onMouseDown={(e) => { e.preventDefault(); rewriteSelection('concise'); }}
+          className="h-7 rounded px-2 text-xs font-medium text-gray-300 transition hover:bg-gray-600 hover:text-white disabled:opacity-40"
+        >
+          {rewriteLoading === 'concise' ? '다듬는 중' : '간결하게'}
+        </button>
+        <button
+          type="button"
+          title="선택 문장을 쉽게 다듬기"
+          disabled={!!rewriteLoading}
+          onMouseDown={(e) => { e.preventDefault(); rewriteSelection('easy'); }}
+          className="h-7 rounded px-2 text-xs font-medium text-gray-300 transition hover:bg-gray-600 hover:text-white disabled:opacity-40"
+        >
+          쉽게
+        </button>
+        <button
+          type="button"
+          title="선택 문장을 전문적인 기사 문체로 다듬기"
+          disabled={!!rewriteLoading}
+          onMouseDown={(e) => { e.preventDefault(); rewriteSelection('professional'); }}
+          className="h-7 rounded px-2 text-xs font-medium text-gray-300 transition hover:bg-gray-600 hover:text-white disabled:opacity-40"
+        >
+          전문적으로
+        </button>
+        <select
+          title="선택 문장 번역"
+          disabled={translateLoading}
+          defaultValue=""
+          onMouseDown={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            const value = e.target.value as 'ko' | 'en' | 'ja' | 'zh' | '';
+            if (!value) return;
+            translateSelection(value);
+            e.target.value = '';
+          }}
+          className="h-7 rounded border border-gray-600 bg-gray-700 px-2 text-xs font-medium text-gray-200 outline-none transition hover:bg-gray-600 focus:border-blue-500 disabled:opacity-40"
+        >
+          <option value="">{translateLoading ? '번역 중' : '번역'}</option>
+          <option value="ko">한국어로</option>
+          <option value="en">영어로</option>
+          <option value="ja">일본어로</option>
+          <option value="zh">중국어로</option>
+        </select>
         <Btn onClick={() => setIsFullscreen(!isFullscreen)} active={isFullscreen} title="전체화면">
           {isFullscreen
             ? <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/></svg>
@@ -427,6 +604,76 @@ export default function TiptapEditor({ content, onChange, onAutoSave }: Props) {
           }
         </Btn>
       </div>
+
+      {showSpellPanel && (
+        <div className="border-b border-gray-700 bg-gray-900 px-4 py-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-100">맞춤법 검사</div>
+              <p className="mt-0.5 text-xs text-gray-500">
+                {spellLoading
+                  ? 'AI가 맞춤법과 띄어쓰기를 검사하고 있습니다.'
+                  : spellIssues.length
+                  ? `${spellIssues.length}개의 확인할 표현이 있습니다.`
+                  : spellError || '확인할 표현을 찾지 못했습니다.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={runSpellCheck}
+                className="rounded-lg border border-gray-700 px-3 py-1.5 text-xs text-gray-300 transition hover:bg-gray-800 hover:text-white"
+              >
+                다시 검사
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSpellPanel(false)}
+                className="rounded-lg px-3 py-1.5 text-xs text-gray-500 transition hover:bg-gray-800 hover:text-gray-200"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+
+          {spellLoading && (
+            <div className="rounded-lg border border-gray-700 bg-gray-800 p-4 text-sm text-gray-400">
+              검사 중...
+            </div>
+          )}
+
+          {!spellLoading && spellIssues.length > 0 && (
+            <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+              {spellIssues.map((issue) => (
+                <div key={issue.id} className="rounded-lg border border-gray-700 bg-gray-800 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-red-300 line-through">
+                          {issue.original}
+                        </span>
+                        <span className="text-gray-500">→</span>
+                        <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-300">
+                          {issue.replacement}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-400">{issue.message}</p>
+                      <p className="mt-1 text-xs text-gray-500">{issue.context}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => applySpellIssue(issue)}
+                      className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-700"
+                    >
+                      적용
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {!isPreview ? (
         <EditorContent

@@ -16,13 +16,14 @@ interface Payment {
   periodEnd: string;
   paymentMethodBrand: string;
   paymentMethodLast4: string;
-  planType: 'daily' | 'weekly' | 'all';
+  planType: 'daily' | 'weekly' | 'all' | 'premium';
 }
 
 const planLabel: Record<string, string> = {
   daily: '데일리 플랜',
   weekly: '위클리 플랜',
   all: '올인원 플랜',
+  premium: '프리미엄 플랜',
 };
 
 const statusConfig: Record<PaymentStatus, { label: string; color: string; bg: string }> = {

@@ -5,12 +5,14 @@ import {
   Delete,
   Put,
   Body,
+  Param,
   Req,
   UseGuards,
   ForbiddenException,
 } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PlanType, SubscriptionStatus } from './subscription.entity';
 
 @Controller('subscriptions')
 @UseGuards(JwtAuthGuard)
@@ -29,7 +31,7 @@ export class SubscriptionsController {
     @Req() req: any,
     @Body()
     body: {
-      planType: 'daily' | 'weekly' | 'all';
+      planType: PlanType;
       paymentMethodBrand: string;
       paymentMethodLast4: string;
     },
@@ -93,5 +95,65 @@ export class SubscriptionsController {
       throw new ForbiddenException('관리자만 접근 가능합니다.');
     }
     return this.subscriptionsService.getAllSubscribers();
+  }
+
+  @Put('admin/:id/status')
+  async updateSubscriberStatus(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { status: SubscriptionStatus },
+  ) {
+    if (req.user.role !== 'admin') {
+      throw new ForbiddenException('관리자만 접근 가능합니다.');
+    }
+    return this.subscriptionsService.updateAdminStatus(Number(id), body.status);
+  }
+
+  @Put('admin/:id/settings')
+  async updateSubscriberSettings(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { dailyActive: boolean; weeklyActive: boolean },
+  ) {
+    if (req.user.role !== 'admin') {
+      throw new ForbiddenException('관리자만 접근 가능합니다.');
+    }
+    return this.subscriptionsService.updateAdminSettings(
+      Number(id),
+      body.dailyActive,
+      body.weeklyActive,
+    );
+  }
+
+  @Put('admin/:id/plan')
+  async updateSubscriberPlan(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { planType: PlanType },
+  ) {
+    if (req.user.role !== 'admin') {
+      throw new ForbiddenException('관리자만 접근 가능합니다.');
+    }
+    return this.subscriptionsService.updateAdminPlan(Number(id), body.planType);
+  }
+
+  @Put('admin/:id/memo')
+  async updateSubscriberMemo(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { adminMemo: string },
+  ) {
+    if (req.user.role !== 'admin') {
+      throw new ForbiddenException('관리자만 접근 가능합니다.');
+    }
+    return this.subscriptionsService.updateAdminMemo(Number(id), body.adminMemo);
+  }
+
+  @Get('admin/:id/engagement')
+  async getSubscriberEngagement(@Req() req: any, @Param('id') id: string) {
+    if (req.user.role !== 'admin') {
+      throw new ForbiddenException('관리자만 접근 가능합니다.');
+    }
+    return this.subscriptionsService.getAdminEngagement(Number(id));
   }
 }

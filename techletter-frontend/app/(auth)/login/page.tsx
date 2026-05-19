@@ -4,6 +4,18 @@ import { useState } from 'react';
 import Link from 'next/link';
 import api from '@/lib/api';
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'response' in error &&
+    typeof (error as { response?: { data?: { message?: unknown } } }).response?.data?.message === 'string'
+  ) {
+    return (error as { response: { data: { message: string } } }).response.data.message;
+  }
+  return fallback;
+}
+
 export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -19,16 +31,16 @@ export default function LoginPage() {
       const res = await api.post('/auth/login', form);
       localStorage.setItem('accessToken', res.data.accessToken);
       window.location.href = '/';
-    } catch (err: any) {
-      setError(err.response?.data?.message || '로그인에 실패했습니다.');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, '로그인에 실패했습니다.'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center transition-colors duration-200">
-      <div className="w-full max-w-md card-dark p-8 shadow">
+    <div className="flex min-h-dvh items-start justify-center overflow-y-auto px-4 pb-[calc(8rem+env(safe-area-inset-bottom))] pt-10 transition-colors duration-200 sm:items-center sm:pt-12">
+      <div className="w-full max-w-md card-dark p-6 shadow sm:p-8">
         <Link href="/">
           <h1 className="mb-2 cursor-pointer text-center text-2xl font-bold text-gray-900 transition hover:opacity-80 dark:text-white">
             TechLetter

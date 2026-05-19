@@ -16,7 +16,8 @@ export type SubscriptionStatus =
   | 'EXPIRED'
   | 'PAYMENT_FAILED';
 
-export type PlanType = 'daily' | 'weekly' | 'all';
+export type PlanType = 'daily' | 'weekly' | 'all' | 'premium';
+export type BillingCycle = 'monthly' | 'yearly';
 
 @Entity('subscriptions')
 export class Subscription {
@@ -39,10 +40,17 @@ export class Subscription {
 
   @Column({
     type: 'enum',
-    enum: ['daily', 'weekly', 'all'],
+    enum: ['daily', 'weekly', 'all', 'premium'],
     nullable: true,
   })
   planType!: PlanType | null;
+
+  @Column({
+    type: 'enum',
+    enum: ['monthly', 'yearly'],
+    default: 'monthly',
+  })
+  billingCycle!: BillingCycle;
 
   @Column({ type: 'date', nullable: true })
   startDate!: string | null;
@@ -52,6 +60,15 @@ export class Subscription {
 
   @Column({ type: 'date', nullable: true })
   nextPaymentDate!: string | null;
+
+  @Column({ default: true })
+  autoRenew!: boolean;
+
+  @Column({ default: false })
+  cancelAtPeriodEnd!: boolean;
+
+  @Column({ type: 'date', nullable: true })
+  trialEndsAt!: string | null;
 
   @Column({ type: 'varchar', nullable: true })
   paymentMethodBrand!: string | null;
@@ -67,6 +84,9 @@ export class Subscription {
 
   @Column({ type: 'varchar', nullable: true })
   dailySendTime!: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  adminMemo!: string | null;
 
   @CreateDateColumn()
   createdAt!: Date;

@@ -44,6 +44,26 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { id } });
   }
 
+  async listForAdmin(): Promise<User[]> {
+    return this.usersRepository.find({
+      order: { createdAt: 'DESC' },
+      take: 200,
+    });
+  }
+
+  async updateRoleForAdmin(adminId: number, userId: number, role: UserRole): Promise<User> {
+    if (!Object.values(UserRole).includes(role)) {
+      throw new BadRequestException('변경할 수 없는 권한입니다.');
+    }
+    if (adminId === userId && role !== UserRole.ADMIN) {
+      throw new BadRequestException('본인 관리자 권한은 직접 해제할 수 없습니다.');
+    }
+    const user = await this.findById(userId);
+    if (!user) throw new NotFoundException('유저를 찾을 수 없습니다.');
+    user.role = role;
+    return this.usersRepository.save(user);
+  }
+
   async getUserReport(userId: number): Promise<UserReport> {
     const [bookmarks, likeCount] = await Promise.all([
       this.bookmarkRepository.find({ where: { userId } }),
@@ -139,10 +159,25 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  async updateUser(id: number, data: { nickname?: string }): Promise<User> {
+  async updateUser(id: number, data: {
+    nickname?: string;
+    profileImage?: string;
+    bio?: string;
+    snsLinks?: {
+      website?: string;
+      github?: string;
+      linkedin?: string;
+      x?: string;
+    };
+    interestCategoryIds?: number[];
+  }): Promise<User> {
     const user = await this.findById(id);
     if (!user) throw new ConflictException('유저를 찾을 수 없습니다.');
-    if (data.nickname) user.nickname = data.nickname;
+    if (data.nickname !== undefined) user.nickname = data.nickname.trim();
+    if (data.profileImage !== undefined) user.profileImage = data.profileImage.trim();
+    if (data.bio !== undefined) user.bio = data.bio.trim();
+    if (data.snsLinks !== undefined) user.snsLinks = data.snsLinks;
+    if (data.interestCategoryIds !== undefined) user.interestCategoryIds = data.interestCategoryIds;
     return this.usersRepository.save(user);
   }
 

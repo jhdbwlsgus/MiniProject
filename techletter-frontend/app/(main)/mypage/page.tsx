@@ -15,6 +15,8 @@ interface User {
   email: string;
   nickname: string;
   role: string;
+  profileImage?: string | null;
+  socialProvider?: string;
 }
 
 interface ReporterProfile {
@@ -31,7 +33,7 @@ type SubscriptionStatus = 'NONE' | 'ACTIVE' | 'CANCELED' | 'EXPIRED' | 'PAYMENT_
 
 interface Subscription {
   status: SubscriptionStatus;
-  planType: 'daily' | 'weekly' | 'all' | null;
+  planType: 'daily' | 'weekly' | 'all' | 'premium' | null;
   startDate: string | null;
   endDate: string | null;
   nextPaymentDate: string | null;
@@ -98,6 +100,7 @@ const planLabel: Record<string, string> = {
   daily: '데일리 플랜',
   weekly: '위클리 플랜',
   all: '올인원 플랜',
+  premium: '프리미엄 플랜',
 };
 
 const formatDate = (dateStr: string | null) => {
@@ -106,8 +109,7 @@ const formatDate = (dateStr: string | null) => {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 };
 
-// 👇 수정된 부분: 'approve' 타입이 추가되었습니다!
-function AdminShortcutIcon({ type }: { type: 'write' | 'manage' | 'stats' | 'approve' }) {
+function AdminShortcutIcon({ type }: { type: 'write' | 'manage' | 'stats' | 'subscribers' }) {
   const commonProps = {
     width: 22,
     height: 22,
@@ -141,12 +143,13 @@ function AdminShortcutIcon({ type }: { type: 'write' | 'manage' | 'stats' | 'app
     );
   }
 
-  // 👇 추가된 '기자 승인' 아이콘
-  if (type === 'approve') {
+  if (type === 'subscribers') {
     return (
       <svg {...commonProps}>
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-        <polyline points="22 4 12 14.01 9 11.01" />
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
     );
   }
@@ -334,27 +337,6 @@ export default function MyPage() {
   const [stats, setStats] = useState({ bookmarks: 0, likes: 0, comments: 0 });
   const [loading, setLoading] = useState(true);
 
-  const [editMode, setEditMode] = useState(false);
-  const [newNickname, setNewNickname] = useState('');
-  const [editLoading, setEditLoading] = useState(false);
-  const [reporterApplyOpen, setReporterApplyOpen] = useState(false);
-  const [reporterApplyLoading, setReporterApplyLoading] = useState(false);
-  const [reporterApplyForm, setReporterApplyForm] = useState({
-    realName: '',
-    organization: '',
-    bio: '',
-    portfolioUrl: '',
-  });
-
-  const [passwords, setPasswords] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordError, setPasswordError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
-
   const { report } = useUserReport();
 
   useEffect(() => {
@@ -386,7 +368,6 @@ export default function MyPage() {
           likes: 0,
           comments: 0,
         });
-        setNewNickname(userRes.data.nickname);
       } catch {
         router.push('/login');
       } finally {
@@ -446,70 +427,14 @@ export default function MyPage() {
 
     try {
       // 2. 백엔드 API에 변경된 설정값 전송 (API 엔드포인트는 진현님의 백엔드 설정에 맞게 PATCH나 PUT으로 맞춰주세요)
-      await api.patch('/subscriptions/me', { [type]: !prevValue });
+      await api.put('/subscriptions/me/settings', {
+        dailyActive: type === 'dailyActive' ? !prevValue : subscription.dailyActive ?? false,
+        weeklyActive: type === 'weeklyActive' ? !prevValue : subscription.weeklyActive ?? false,
+      });
     } catch (err: any) {
       // 3. 서버 오류 시 원래 상태로 롤백
       setSubscription({ ...subscription, [type]: prevValue });
       alert(err.response?.data?.message || '설정 변경에 실패했습니다.');
-    }
-  };
-
-  const handleEditNickname = async () => {
-    if (!newNickname.trim() || newNickname === user?.nickname) return;
-    setEditLoading(true);
-    try {
-      await api.put('/users/me', { nickname: newNickname });
-      setUser((u) => (u ? { ...u, nickname: newNickname } : u));
-      setEditMode(false);
-    } catch (err: any) {
-      alert(err.response?.data?.message || '변경 실패');
-    } finally {
-      setEditLoading(false);
-    }
-  };
-
-  const handleReporterApply = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setReporterApplyLoading(true);
-    try {
-      const res = await api.post('/reporters/apply', reporterApplyForm);
-      setReporterProfile(res.data);
-      setReporterApplyOpen(false);
-      alert('기자 인증 신청이 접수되었습니다. 관리자 승인 후 기자 계정으로 전환됩니다.');
-    } catch (err: any) {
-      alert(err.response?.data?.message || '기자 인증 신청에 실패했습니다.');
-    } finally {
-      setReporterApplyLoading(false);
-    }
-  };
-  
-  const handleChangePassword = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setPasswordError('');
-    setPasswordSuccess('');
-
-    if (passwords.newPassword !== passwords.confirmPassword) {
-      setPasswordError('새 비밀번호가 일치하지 않습니다.');
-      return;
-    }
-
-    if (passwords.newPassword.length < 8) {
-      setPasswordError('새 비밀번호는 8자 이상이어야 합니다.');
-      return;
-    }
-
-    setPasswordLoading(true);
-    try {
-      await api.patch('/users/me/password', {
-        currentPassword: passwords.currentPassword,
-        newPassword: passwords.newPassword,
-      });
-      setPasswordSuccess('비밀번호가 성공적으로 변경되었습니다.');
-      setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } catch (err: any) {
-      setPasswordError(err.response?.data?.message || '비밀번호 변경에 실패했습니다.');
-    } finally {
-      setPasswordLoading(false);
     }
   };
 
@@ -532,9 +457,8 @@ export default function MyPage() {
   const bookmarkCount = report?.bookmarkCount ?? 0;
   const likeCount = report?.likeCount ?? 0;
   const maxVal = Math.max(readCount, bookmarkCount, likeCount, 1);
-  const isReporter = user?.role === 'reporter';
   const isAdmin = user?.role === 'admin';
-  const reporterStatus = reporterProfile?.status;
+  const isReporter = user?.role === 'reporter';
 
   return (
     // 전체 배경을 부드러운 다크그레이(#121212)로 변경
@@ -553,16 +477,13 @@ export default function MyPage() {
         <section className="bg-white dark:bg-[#1E1E1E] rounded-2xl border border-gray-100 dark:border-[#2E2E2E] overflow-hidden">
           <div className="p-5">
             <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gray-900 dark:bg-white flex items-center justify-center
-                              text-white dark:text-gray-900 text-xl font-bold flex-shrink-0">
-                {user?.nickname?.[0]?.toUpperCase()}
-              </div>
+              <ProfileAvatar nickname={user?.nickname} imageUrl={user?.profileImage} size="lg" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-base text-gray-900 dark:text-white truncate">
                     {user?.nickname}
                   </span>
-                  {user?.role === 'admin' && (
+                  {isAdmin && (
                     <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 dark:bg-[#2A2A2A]
                                      text-blue-600 dark:text-blue-400 rounded-md font-semibold">
                       ADMIN
@@ -577,111 +498,14 @@ export default function MyPage() {
                 </div>
                 <p className="text-xs text-gray-400 dark:text-gray-400 truncate mt-0.5">{user?.email}</p>
               </div>
-              <button
-                onClick={() => setEditMode((v) => !v)}
+              <Link
+                href="/mypage/profile"
                 className="text-xs text-gray-500 dark:text-gray-300 border border-gray-200 dark:border-[#3A3A3A]
                            rounded-lg px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-[#2A2A2A] transition flex-shrink-0 whitespace-nowrap"
               >
-                {editMode ? '닫기' : '편집'}
-              </button>
+                {isAdmin ? '관리자 설정' : '프로필 관리'}
+              </Link>
             </div>
-
-            {editMode && (
-              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-[#2E2E2E] flex flex-col gap-4">
-                <div>
-                  <label className="text-xs text-gray-400 dark:text-gray-400 mb-1.5 block">닉네임 변경</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newNickname}
-                      onChange={(e) => setNewNickname(e.target.value)}
-                      className="flex-1 bg-gray-50 dark:bg-[#121212] border border-gray-200 dark:border-[#3A3A3A]
-                                 rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white outline-none
-                                 focus:ring-2 focus:ring-gray-900 dark:focus:ring-white transition min-w-0"
-                    />
-                    <button
-                      onClick={handleEditNickname}
-                      disabled={editLoading || newNickname === user?.nickname || !newNickname.trim()}
-                      className="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900
-                                 text-sm rounded-xl font-medium disabled:opacity-40 transition whitespace-nowrap flex-shrink-0"
-                    >
-                      {editLoading ? '저장 중...' : '저장'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 dark:bg-[#121212] border border-gray-200 dark:border-[#3A3A3A] rounded-2xl p-4">
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white">비밀번호 변경</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">현재 비밀번호와 새로운 비밀번호를 입력하세요.</p>
-                    </div>
-                  </div>
-
-                  {passwordError && (
-                    <div className="mb-3 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm text-red-400">
-                      {passwordError}
-                    </div>
-                  )}
-                  {passwordSuccess && (
-                    <div className="mb-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-sm text-emerald-300">
-                      {passwordSuccess}
-                    </div>
-                  )}
-
-                  <form onSubmit={handleChangePassword} className="flex flex-col gap-3">
-                    <div>
-                      <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">현재 비밀번호</label>
-                      <input
-                        type="password"
-                        value={passwords.currentPassword}
-                        onChange={(e) => setPasswords({ ...passwords, currentPassword: e.target.value })}
-                        className="w-full bg-white dark:bg-[#0E0E0E] border border-gray-200 dark:border-[#2F2F2F] rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white transition"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">새 비밀번호 (8자 이상)</label>
-                      <input
-                        type="password"
-                        value={passwords.newPassword}
-                        onChange={(e) => setPasswords({ ...passwords, newPassword: e.target.value })}
-                        className="w-full bg-white dark:bg-[#0E0E0E] border border-gray-200 dark:border-[#2F2F2F] rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white transition"
-                        required
-                        minLength={8}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-500 dark:text-gray-400 mb-1.5 block">새 비밀번호 확인</label>
-                      <input
-                        type="password"
-                        value={passwords.confirmPassword}
-                        onChange={(e) => setPasswords({ ...passwords, confirmPassword: e.target.value })}
-                        className="w-full bg-white dark:bg-[#0E0E0E] border border-gray-200 dark:border-[#2F2F2F] rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-white transition"
-                        required
-                        minLength={8}
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={passwordLoading}
-                      className="mt-2 w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white py-2.5 text-sm font-medium transition disabled:opacity-50"
-                    >
-                      {passwordLoading ? '변경 중...' : '비밀번호 변경'}
-                    </button>
-                  </form>
-                </div>
-                <div className="pt-6 mt-4 border-t border-gray-100 dark:border-[#2A2A2A] flex justify-center">
-                  <button
-                    onClick={handleDeleteAccount}
-                    className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 bg-gray-50 hover:bg-red-50 dark:bg-[#1A1A1A] dark:hover:bg-red-950/30 rounded-lg transition-colors"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                    <span>회원 탈퇴하기</span>
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2 px-5 pb-5">
@@ -714,135 +538,20 @@ export default function MyPage() {
           )}
         </section>
 
-        {/* ── 2. 기자 인증 / 작성 메뉴 ── */}
-        {!isAdmin && (
-          <section className="bg-white dark:bg-[#1E1E1E] rounded-2xl border border-gray-100 dark:border-[#2E2E2E] p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">기자 인증</p>
-                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  승인되면 계정이 기자 권한으로 전환되고 기사 작성 메뉴가 열립니다.
-                </p>
-              </div>
-              {isReporter ? (
-                <span className="rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300">
-                  인증 완료
-                </span>
-              ) : reporterStatus === 'pending' ? (
-                <span className="rounded-md bg-yellow-50 px-2 py-1 text-[11px] font-semibold text-yellow-600 dark:bg-yellow-950/40 dark:text-yellow-300">
-                  승인 대기
-                </span>
-              ) : reporterStatus === 'rejected' ? (
-                <span className="rounded-md bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-600 dark:bg-red-950/40 dark:text-red-300">
-                  반려
-                </span>
-              ) : (
-                <span className="rounded-md bg-gray-100 px-2 py-1 text-[11px] font-semibold text-gray-500 dark:bg-[#2A2A2A] dark:text-gray-400">
-                  미인증
-                </span>
-              )}
-            </div>
-
-            {isReporter ? (
-              <div className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200">
-                기자 인증이 완료되어 기사 작성 권한이 활성화되었습니다.
-              </div>
-            ) : reporterStatus === 'pending' ? (
-              <div className="mt-4 rounded-xl bg-yellow-50 p-4 text-sm text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-200">
-                기자 인증 신청이 접수되어 관리자 승인을 기다리고 있습니다.
-              </div>
-            ) : (
-              <>
-                {reporterStatus === 'rejected' && (
-                  <div className="mt-4 rounded-xl bg-red-50 p-4 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-200">
-                    이전 신청이 반려되었습니다.
-                    {reporterProfile?.rejectedReason && (
-                      <div className="mt-1">사유: {reporterProfile.rejectedReason}</div>
-                    )}
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setReporterApplyOpen((v) => !v)}
-                  className="mt-4 w-full rounded-xl bg-gray-900 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
-                >
-                  {reporterApplyOpen ? '신청 폼 닫기' : reporterStatus === 'rejected' ? '기자 인증 다시 신청' : '기자 인증 신청하기'}
-                </button>
-
-                {reporterApplyOpen && (
-                  <form onSubmit={handleReporterApply} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">실명</label>
-                      <input
-                        type="text"
-                        value={reporterApplyForm.realName}
-                        onChange={(e) => setReporterApplyForm({ ...reporterApplyForm, realName: e.target.value })}
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-900 dark:border-[#3A3A3A] dark:bg-[#121212] dark:text-white dark:focus:ring-white"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">소속/매체명</label>
-                      <input
-                        type="text"
-                        value={reporterApplyForm.organization}
-                        onChange={(e) => setReporterApplyForm({ ...reporterApplyForm, organization: e.target.value })}
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-900 dark:border-[#3A3A3A] dark:bg-[#121212] dark:text-white dark:focus:ring-white"
-                        required
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">포트폴리오 URL</label>
-                      <input
-                        type="url"
-                        value={reporterApplyForm.portfolioUrl}
-                        onChange={(e) => setReporterApplyForm({ ...reporterApplyForm, portfolioUrl: e.target.value })}
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-900 dark:border-[#3A3A3A] dark:bg-[#121212] dark:text-white dark:focus:ring-white"
-                        placeholder="https://"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">기자 소개 및 신청 사유</label>
-                      <textarea
-                        value={reporterApplyForm.bio}
-                        onChange={(e) => setReporterApplyForm({ ...reporterApplyForm, bio: e.target.value })}
-                        className="min-h-28 w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-900 dark:border-[#3A3A3A] dark:bg-[#121212] dark:text-white dark:focus:ring-white"
-                        placeholder="취재 분야, 경력, 작성하고 싶은 기사 주제를 적어주세요."
-                        required
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={reporterApplyLoading}
-                      className="rounded-xl bg-blue-600 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-50 sm:col-span-2"
-                    >
-                      {reporterApplyLoading ? '신청 중...' : '인증 신청 제출'}
-                    </button>
-                  </form>
-                )}
-              </>
-            )}
-          </section>
-        )}
-
-        {/* ── 3. 관리자/기자 퀵메뉴 ── */}
-        {(isAdmin || isReporter) && (
+        {/* ── 2. 관리자 퀵메뉴 ── */}
+        {isAdmin && (
           <section className="bg-blue-50 dark:bg-[#1E2530] rounded-2xl border border-blue-100
                                dark:border-blue-900/40 p-4">
-            <p className="text-[11px] font-semibold text-blue-500 dark:text-blue-400 mb-3">
-              {isAdmin ? '관리자' : '기자'}
-            </p>
-            {/* 👇 수정된 부분: icon 값들이 영단어로 통일되고 끝에 as const가 추가되었습니다! */}
-            <div className={`grid gap-2 ${isAdmin ? 'grid-cols-4' : 'grid-cols-1'}`}>
-              {(isAdmin ? [
-                { href: '/admin/news/create', icon: 'write', label: '뉴스 작성' },
-                { href: '/admin/news',        icon: 'manage', label: '뉴스 관리' },
-                { href: '/admin/reporters',   icon: 'approve', label: '기자 승인' },
-                { href: '/admin/stats',       icon: 'stats', label: '통계 분석' },
-              ] as const : [
-                { href: '/admin/news/create', icon: 'write', label: '기사 작성' },
-              ] as const).map(({ href, icon, label }) => (
+            <p className="text-[11px] font-semibold text-blue-500 dark:text-blue-400 mb-3">관리자</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {[
+                { href: '/admin/news/create', icon: 'write' as const, label: '뉴스 작성' },
+                { href: '/admin/news',        icon: 'manage' as const, label: '뉴스 관리' },
+                { href: '/admin/users',       icon: 'subscribers' as const, label: '사용자 관리' },
+                { href: '/admin/reporters',   icon: 'manage' as const, label: '기자 관리' },
+                { href: '/admin/stats',       icon: 'stats' as const, label: '통계 분석' },
+                { href: '/admin/subscribers', icon: 'subscribers' as const, label: '구독자 관리' },
+              ].map(({ href, icon, label }) => (
                 <Link
                   key={href}
                   href={href}
@@ -859,7 +568,33 @@ export default function MyPage() {
           </section>
         )}
 
-        {/* ── 4. 최근 북마크 ── */}
+        {/* ── 2-1. 기자 퀵메뉴 ── */}
+        {isReporter && (
+          <section className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-900/40 dark:bg-[#1E2A24]">
+            <p className="mb-3 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">기자</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                { href: '/admin/news/create', icon: 'write' as const, label: '기사 작성' },
+                { href: '/reporter/dashboard', icon: 'manage' as const, label: '내 기사/피드' },
+                { href: '/reporter/subscribers', icon: 'subscribers' as const, label: '내 구독자' },
+                { href: '/reporter/dashboard', icon: 'stats' as const, label: '내 통계' },
+              ].map(({ href, icon, label }) => (
+                <Link
+                  key={`${href}-${label}`}
+                  href={href}
+                  className="flex flex-col items-center gap-1.5 rounded-xl bg-white py-3 text-emerald-700 transition hover:shadow-sm dark:bg-[#2A2A2A] dark:text-emerald-300"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center">
+                    <AdminShortcutIcon type={icon} />
+                  </span>
+                  <span className="text-[11px] font-medium">{label}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── 3. 최근 북마크 ── */}
         <section className="bg-white dark:bg-[#1E1E1E] rounded-2xl border border-gray-100 dark:border-[#2E2E2E] p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">최근 저장한 뉴스</h3>
@@ -903,7 +638,40 @@ export default function MyPage() {
         </section>
 
         {/* 구독 설정 */}
-        <div className="pb-6 border-b border-gray-100 dark:border-[#2E2E2E]">
+        <section className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-[#2E2E2E] dark:bg-[#1E1E1E]">
+          <div className="mb-4 flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <span className="text-sm font-bold text-gray-900 dark:text-white">구독 상태</span>
+          </div>
+          <SubscriptionSection
+            subscription={subscription}
+            onUnsubscribe={handleUnsubscribe}
+            onResubscribe={handleResubscribe}
+          />
+          {subscription?.status === 'ACTIVE' && (
+            <div className="mt-4 border-t border-gray-100 pt-4 dark:border-[#2E2E2E]">
+              <div className="mb-3 text-xs font-semibold text-gray-500">수신 설정</div>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-gray-900 dark:text-gray-200">데일리 뉴스레터</div>
+                    <div className="text-xs text-gray-500">{subscription.dailyActive ? '매일 오전 수신 중' : '수신 중지'}</div>
+                  </div>
+                  <Toggle on={subscription.dailyActive ?? false} onToggle={() => handleToggleSubscription('dailyActive')} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-gray-900 dark:text-gray-200">주간 뉴스레터</div>
+                    <div className="text-xs text-gray-500">{subscription.weeklyActive ? '매주 월요일 수신 중' : '수신 중지'}</div>
+                  </div>
+                  <Toggle on={subscription.weeklyActive ?? false} onToggle={() => handleToggleSubscription('weeklyActive')} />
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <div className="hidden">
           <div className="flex items-center gap-2 mb-4">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
             <span className="font-bold text-sm text-gray-900 dark:text-white">구독 설정</span>

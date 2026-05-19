@@ -21,6 +21,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // 토큰 캐시 말고 DB에서 최신 유저 정보 가져옴
     const user = await this.usersService.findById(payload.sub);
     if (!user) return null;
-    return { id: user.id, email: user.email, role: user.role, nickname: user.nickname };
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      nickname: user.nickname,
+      profileImage: user.profileImage,
+      socialProvider: user.socialProvider,
+      bio: user.bio,
+      snsLinks: user.snsLinks,
+      interestCategoryIds: user.interestCategoryIds,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 }

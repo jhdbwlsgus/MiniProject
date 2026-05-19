@@ -4,19 +4,102 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import api, { getImageUrl } from '@/lib/api';
+import AdminNavTabs from '@/components/admin/AdminNavTabs';
+
+interface NewsSummary {
+  id: number;
+  title: string;
+  viewCount: number;
+  likeCount: number;
+  shareCount?: number;
+  thumbnailUrl: string | null;
+  createdAt: string;
+  publishedAt?: string | null;
+  author?: { nickname: string };
+  category?: { name: string };
+}
+
+interface TrendPoint {
+  date: string;
+  label: string;
+  count: number;
+}
+
+interface CategoryPerformance {
+  name: string;
+  count: number;
+  views: number;
+  rate: number;
+}
 
 interface Stats {
-  totalNews: number;
-  totalComments: number;
-  topNews: {
-    id: number;
-    title: string;
-    viewCount: number;
-    likeCount: number;
-    thumbnailUrl: string;
-    createdAt: string;
-    author: { nickname: string };
-  }[];
+  totalUsers?: number;
+  totalSubscribers?: number;
+  activeSubscribers?: number;
+  canceledSubscribers?: number;
+  failedSubscribers?: number;
+  monthNewSubscribers?: number;
+  monthlyCancelRate?: number;
+  subscriberPlans?: {
+    daily?: number;
+    weekly?: number;
+    all?: number;
+    premium?: number;
+  };
+  totalNews?: number;
+  draftNews?: number;
+  scheduledNews?: number;
+  pendingNewsletter?: number;
+  todayPublishedNews?: number;
+  aiNewsRate?: number;
+  totalComments?: number;
+  totalLikes?: number;
+  totalViews?: number;
+  todayViews?: number;
+  averageViews?: number;
+  likeConversionRate?: number;
+  commentParticipationRate?: number;
+  newsletterMetrics?: {
+    averageOpenRate?: number;
+    averageClickRate?: number;
+    deliverySuccessRate?: number;
+    averageDwellSeconds?: number;
+    sentRecipients?: number;
+    successCount?: number;
+    failCount?: number;
+  };
+  subscriberTrend?: TrendPoint[];
+  categoryPerformance?: CategoryPerformance[];
+  topNews?: NewsSummary[];
+  recentNews?: NewsSummary[];
+}
+
+const formatDate = (date: string | null | undefined) => {
+  if (!date) return '-';
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? '-' : parsed.toLocaleDateString('ko-KR');
+};
+
+const formatNumber = (value: number | undefined) => (value ?? 0).toLocaleString();
+const formatPercent = (value: number | undefined) => `${value ?? 0}%`;
+
+function KpiCard({ label, value, sub, tone = 'text-blue-500' }: { label: string; value: string; sub?: string; tone?: string }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
+      <div className={`text-2xl font-bold ${tone}`}>{value}</div>
+      <div className="mt-1 text-xs font-medium text-gray-500">{label}</div>
+      {sub && <div className="mt-2 text-[11px] text-gray-400">{sub}</div>}
+    </div>
+  );
+}
+
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+      <h2 className="mb-4 text-sm font-bold text-gray-700 dark:text-gray-200">{title}</h2>
+      {children}
+    </section>
+  );
 }
 
 export default function AdminStatsPage() {
@@ -27,7 +110,7 @@ export default function AdminStatsPage() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await api.get('/stats/dashboard');
+        const res = await api.get<Stats>('/stats/dashboard');
         setStats(res.data);
       } catch {
         router.push('/login');
@@ -36,117 +119,229 @@ export default function AdminStatsPage() {
       }
     };
     fetchStats();
-  }, []);
+  }, [router]);
 
-  if (loading) return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-      <div className="text-gray-500">로딩 중...</div>
-    </div>
-  );
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-gray-950">
+        <div className="text-sm text-gray-500">로딩 중...</div>
+      </div>
+    );
+  }
+
+  const safeStats = {
+    totalUsers: stats?.totalUsers ?? 0,
+    totalSubscribers: stats?.totalSubscribers ?? 0,
+    activeSubscribers: stats?.activeSubscribers ?? 0,
+    canceledSubscribers: stats?.canceledSubscribers ?? 0,
+    failedSubscribers: stats?.failedSubscribers ?? 0,
+    monthNewSubscribers: stats?.monthNewSubscribers ?? 0,
+    monthlyCancelRate: stats?.monthlyCancelRate ?? 0,
+    subscriberPlans: {
+      daily: stats?.subscriberPlans?.daily ?? 0,
+      weekly: stats?.subscriberPlans?.weekly ?? 0,
+      all: stats?.subscriberPlans?.all ?? 0,
+      premium: stats?.subscriberPlans?.premium ?? 0,
+    },
+    totalNews: stats?.totalNews ?? 0,
+    draftNews: stats?.draftNews ?? 0,
+    scheduledNews: stats?.scheduledNews ?? 0,
+    pendingNewsletter: stats?.pendingNewsletter ?? 0,
+    todayPublishedNews: stats?.todayPublishedNews ?? 0,
+    aiNewsRate: stats?.aiNewsRate ?? 0,
+    totalComments: stats?.totalComments ?? 0,
+    totalLikes: stats?.totalLikes ?? 0,
+    totalViews: stats?.totalViews ?? 0,
+    todayViews: stats?.todayViews ?? 0,
+    averageViews: stats?.averageViews ?? 0,
+    likeConversionRate: stats?.likeConversionRate ?? 0,
+    commentParticipationRate: stats?.commentParticipationRate ?? 0,
+    newsletterMetrics: {
+      averageOpenRate: stats?.newsletterMetrics?.averageOpenRate ?? 0,
+      averageClickRate: stats?.newsletterMetrics?.averageClickRate ?? 0,
+      deliverySuccessRate: stats?.newsletterMetrics?.deliverySuccessRate ?? 0,
+      averageDwellSeconds: stats?.newsletterMetrics?.averageDwellSeconds ?? 0,
+      sentRecipients: stats?.newsletterMetrics?.sentRecipients ?? 0,
+      successCount: stats?.newsletterMetrics?.successCount ?? 0,
+      failCount: stats?.newsletterMetrics?.failCount ?? 0,
+    },
+    subscriberTrend: stats?.subscriberTrend ?? [],
+    categoryPerformance: stats?.categoryPerformance ?? [],
+    topNews: stats?.topNews ?? [],
+    recentNews: stats?.recentNews ?? [],
+  };
+
+  const maxSubscriberTrend = Math.max(...safeStats.subscriberTrend.map((item) => item.count), 1);
+  const maxCategoryViews = Math.max(...safeStats.categoryPerformance.map((item) => item.views), 1);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white pb-10">
-      {/* 헤더 */}
-      <header className="sticky top-0 z-50 bg-gray-950 border-b border-gray-800">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
-          <button onClick={() => router.push('/mypage')} className="text-gray-400 hover:text-white transition">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+    <div className="min-h-screen bg-white pb-28 text-gray-950 dark:bg-gray-950 dark:text-white">
+      <header className="sticky top-0 z-50 border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
+        <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4">
+          <button onClick={() => router.push('/mypage')} className="text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-white" aria-label="뒤로가기">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
           </button>
-          <span className="font-bold text-base flex-1">통계 대시보드</span>
+          <span className="flex-1 text-base font-bold">통계 대시보드</span>
         </div>
+        <AdminNavTabs />
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
-
-        {/* 핵심 지표 */}
+      <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
         <section>
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">핵심 지표</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-              <div className="text-2xl font-bold text-blue-400">{stats?.totalNews.toLocaleString()}</div>
-              <div className="text-xs text-gray-500 mt-1">게시된 뉴스</div>
-            </div>
-            <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-              <div className="text-2xl font-bold text-yellow-400">{stats?.totalComments.toLocaleString()}</div>
-              <div className="text-xs text-gray-500 mt-1">전체 댓글</div>
-            </div>
+          <h2 className="mb-3 text-sm font-semibold text-gray-500">콘텐츠</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard label="총 기사 수" value={formatNumber(safeStats.totalNews)} tone="text-blue-500" sub={`임시저장 ${formatNumber(safeStats.draftNews)}개`} />
+            <KpiCard label="오늘 발행 기사" value={formatNumber(safeStats.todayPublishedNews)} tone="text-emerald-500" />
+            <KpiCard label="예약 발송 대기" value={formatNumber(safeStats.pendingNewsletter + safeStats.scheduledNews)} tone="text-violet-500" sub={`뉴스 ${formatNumber(safeStats.scheduledNews)} · 뉴스레터 ${formatNumber(safeStats.pendingNewsletter)}`} />
+            <KpiCard label="AI 작성 기사 비율" value={formatPercent(safeStats.aiNewsRate)} tone="text-cyan-500" />
           </div>
         </section>
 
-        {/* 인기 뉴스 TOP 5 */}
         <section>
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">인기 뉴스 TOP 5</h2>
+          <h2 className="mb-3 text-sm font-semibold text-gray-500">구독/매출</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard label="전체 구독자" value={formatNumber(safeStats.totalSubscribers)} tone="text-gray-900 dark:text-white" />
+            <KpiCard label="활성 구독자" value={formatNumber(safeStats.activeSubscribers)} tone="text-emerald-500" />
+            <KpiCard label="이번 달 신규 구독" value={formatNumber(safeStats.monthNewSubscribers)} tone="text-blue-500" />
+            <KpiCard label="이번 달 해지율" value={formatPercent(safeStats.monthlyCancelRate)} tone="text-amber-500" sub={`누적 해지 ${formatNumber(safeStats.canceledSubscribers)}명`} />
+          </div>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-gray-500">뉴스레터 성과</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard label="평균 오픈율" value={formatPercent(safeStats.newsletterMetrics.averageOpenRate)} tone="text-blue-500" sub="오픈 추적 로그 연결 후 반영" />
+            <KpiCard label="평균 클릭률" value={formatPercent(safeStats.newsletterMetrics.averageClickRate)} tone="text-cyan-500" sub="클릭 추적 로그 연결 후 반영" />
+            <KpiCard label="발송 성공률" value={formatPercent(safeStats.newsletterMetrics.deliverySuccessRate)} tone="text-emerald-500" sub={`성공 ${formatNumber(safeStats.newsletterMetrics.successCount)} · 실패 ${formatNumber(safeStats.newsletterMetrics.failCount)}`} />
+            <KpiCard label="평균 체류시간" value={`${formatNumber(safeStats.newsletterMetrics.averageDwellSeconds)}초`} tone="text-violet-500" sub="읽은 시간 로그 연결 후 반영" />
+          </div>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-gray-500">사용자 반응</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard label="가장 인기 기사" value={safeStats.topNews[0]?.title ? '1위' : '-'} tone="text-yellow-500" sub={safeStats.topNews[0]?.title ?? '게시된 뉴스 없음'} />
+            <KpiCard label="오늘 조회수" value={formatNumber(safeStats.todayViews)} tone="text-blue-500" sub="로그인 사용자 조회 기록 기준" />
+            <KpiCard label="좋아요 전환율" value={formatPercent(safeStats.likeConversionRate)} tone="text-rose-500" sub={`좋아요 ${formatNumber(safeStats.totalLikes)}개`} />
+            <KpiCard label="댓글 참여율" value={formatPercent(safeStats.commentParticipationRate)} tone="text-amber-500" sub={`댓글 ${formatNumber(safeStats.totalComments)}개`} />
+          </div>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-2">
+          <SectionCard title="구독자 증가 추이">
+            <div className="flex h-44 items-end gap-2 border-b border-gray-200 pb-2 dark:border-gray-700">
+              {safeStats.subscriberTrend.map((item) => (
+                <div key={item.date} className="flex flex-1 flex-col items-center gap-2">
+                  <div className="flex h-32 w-full items-end justify-center rounded-t-lg bg-gray-100 dark:bg-gray-800">
+                    <div
+                      className="w-full rounded-t-lg bg-blue-500 transition-all"
+                      style={{ height: `${Math.max(6, Math.round((item.count / maxSubscriberTrend) * 100))}%` }}
+                      title={`${item.label}: ${item.count}명`}
+                    />
+                  </div>
+                  <div className="text-[11px] text-gray-500">{item.label}</div>
+                  <div className="text-xs font-semibold">{formatNumber(item.count)}</div>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+
+          <SectionCard title="인기 카테고리">
+            <div className="flex flex-col gap-3">
+              {safeStats.categoryPerformance.map((category) => (
+                <div key={category.name}>
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="font-medium text-gray-700 dark:text-gray-200">{category.name}</span>
+                    <span className="text-gray-500">{formatPercent(category.rate)} · 조회 {formatNumber(category.views)}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-gray-100 dark:bg-gray-800">
+                    <div
+                      className="h-2 rounded-full bg-emerald-500"
+                      style={{ width: `${Math.max(4, Math.round((category.views / maxCategoryViews) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+              {safeStats.categoryPerformance.length === 0 && (
+                <div className="rounded-xl border border-dashed border-gray-300 py-10 text-center text-sm text-gray-500 dark:border-gray-700">
+                  카테고리 데이터가 없습니다.
+                </div>
+              )}
+            </div>
+          </SectionCard>
+        </section>
+
+        <SectionCard title="기사 성과 순위">
           <div className="flex flex-col gap-2">
-            {stats?.topNews.map((news, index) => (
+            {safeStats.topNews.map((news, index) => (
               <Link key={news.id} href={`/news/${news.id}`}>
-                <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 flex items-center gap-4 hover:border-gray-500 transition cursor-pointer">
-                  {/* 순위 */}
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                <div className="flex items-center gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4 transition hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-500">
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
                     index === 0 ? 'bg-yellow-500 text-black' :
                     index === 1 ? 'bg-gray-400 text-black' :
                     index === 2 ? 'bg-amber-600 text-white' :
-                    'bg-gray-700 text-gray-300'
+                    'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
                   }`}>
                     {index + 1}
                   </div>
 
-                  {/* 썸네일 */}
                   {getImageUrl(news.thumbnailUrl) ? (
-                    <img src={getImageUrl(news.thumbnailUrl)} alt={news.title}
-                      className="w-14 h-10 rounded-lg object-cover flex-shrink-0" />
+                    <img src={getImageUrl(news.thumbnailUrl)} alt={news.title} className="h-10 w-14 shrink-0 rounded-lg object-cover" />
                   ) : (
-                    <div className="w-14 h-10 bg-gray-700 rounded-lg flex-shrink-0 flex items-center justify-center text-gray-500 text-xs">없음</div>
+                    <div className="flex h-10 w-14 shrink-0 items-center justify-center rounded-lg bg-gray-200 text-xs text-gray-500 dark:bg-gray-700">
+                      없음
+                    </div>
                   )}
 
-                  {/* 제목 + 정보 */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-100 line-clamp-1">{news.title}</p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                      <span>{news.author?.nickname}</span>
-                      <span>{new Date(news.createdAt).toLocaleDateString('ko-KR')}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-1 text-sm font-medium">{news.title}</p>
+                    <div className="mt-1 flex items-center gap-3 text-xs text-gray-500">
+                      <span>{news.category?.name ?? '카테고리 없음'}</span>
+                      <span>{formatDate(news.publishedAt ?? news.createdAt)}</span>
                     </div>
                   </div>
 
-                  {/* 조회수/좋아요 */}
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                    <div className="flex items-center gap-1 text-xs text-gray-400">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                      {news.viewCount.toLocaleString()}
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-gray-400">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                      {news.likeCount.toLocaleString()}
-                    </div>
+                  <div className="grid shrink-0 grid-cols-3 gap-3 text-right text-xs text-gray-500">
+                    <div>조회 {formatNumber(news.viewCount)}</div>
+                    <div>좋아요 {formatNumber(news.likeCount)}</div>
+                    <div>공유 {formatNumber(news.shareCount)}</div>
                   </div>
                 </div>
               </Link>
             ))}
 
-            {(!stats?.topNews || stats.topNews.length === 0) && (
-              <div className="text-center py-10 text-gray-500 text-sm">아직 게시된 뉴스가 없어요</div>
+            {safeStats.topNews.length === 0 && (
+              <div className="rounded-xl border border-dashed border-gray-300 py-10 text-center text-sm text-gray-500 dark:border-gray-700">
+                아직 게시된 뉴스가 없습니다.
+              </div>
             )}
           </div>
-        </section>
+        </SectionCard>
 
-        {/* 빠른 링크 */}
-        <section>
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">빠른 링크</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <Link href="/admin/news/create">
-              <div className="bg-blue-600 hover:bg-blue-700 rounded-xl p-4 flex items-center gap-3 transition cursor-pointer">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                <span className="text-sm font-medium">뉴스 작성</span>
+        <SectionCard title="최근 발행 뉴스">
+          <div className="grid gap-2">
+            {safeStats.recentNews.map((news) => (
+              <Link key={news.id} href={`/news/${news.id}`} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 transition hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-500">
+                <div className="min-w-0">
+                  <p className="line-clamp-1 text-sm font-medium">{news.title}</p>
+                  <p className="mt-1 text-xs text-gray-500">{news.author?.nickname ?? '작성자 없음'} · {formatDate(news.publishedAt ?? news.createdAt)}</p>
+                </div>
+                <div className="shrink-0 text-right text-xs text-gray-500">
+                  <div>조회 {formatNumber(news.viewCount)}</div>
+                  <div>좋아요 {formatNumber(news.likeCount)}</div>
+                </div>
+              </Link>
+            ))}
+
+            {safeStats.recentNews.length === 0 && (
+              <div className="rounded-xl border border-dashed border-gray-300 py-8 text-center text-sm text-gray-500 dark:border-gray-700">
+                최근 발행 뉴스가 없습니다.
               </div>
-            </Link>
-            <Link href="/admin/news">
-              <div className="bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl p-4 flex items-center gap-3 transition cursor-pointer">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-                <span className="text-sm font-medium">뉴스 관리</span>
-              </div>
-            </Link>
+            )}
           </div>
-        </section>
-
+        </SectionCard>
       </main>
     </div>
   );
