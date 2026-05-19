@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { AxiosError } from 'axios';
 import api, { getImageUrl } from '@/lib/api';
 import AdminNavTabs from '@/components/admin/AdminNavTabs';
 
@@ -106,14 +107,20 @@ export default function AdminStatsPage() {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
         const res = await api.get<Stats>('/stats/dashboard');
         setStats(res.data);
-      } catch {
-        router.push('/login');
+        setError('');
+      } catch (err) {
+        if (err instanceof AxiosError && err.response?.status === 401) {
+          router.push('/login');
+          return;
+        }
+        setError('통계 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
       } finally {
         setLoading(false);
       }
@@ -189,6 +196,12 @@ export default function AdminStatsPage() {
       </header>
 
       <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-6">
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+            {error}
+          </div>
+        )}
+
         <section>
           <h2 className="mb-3 text-sm font-semibold text-gray-500">콘텐츠</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

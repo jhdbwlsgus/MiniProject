@@ -60,7 +60,7 @@ export class StatsService {
       this.newsRepository
         .createQueryBuilder('news')
         .where('news.status = :status', { status: NewsStatus.PUBLISHED })
-        .andWhere('DATE(COALESCE(news.publishedAt, news.createdAt)) = CURDATE()')
+        .andWhere('DATE(COALESCE(news.publishedAt, news.createdAt)) = CURRENT_DATE')
         .getCount(),
       this.newsRepository
         .createQueryBuilder('news')
@@ -78,7 +78,7 @@ export class StatsService {
         .getRawOne<{ totalViews: string; averageViews: string }>(),
       this.newsViewRepository
         .createQueryBuilder('view')
-        .where('DATE(view.createdAt) = CURDATE()')
+        .where('DATE(view.createdAt) = CURRENT_DATE')
         .getCount(),
       this.newsRepository.find({
         where: { status: NewsStatus.PUBLISHED },
@@ -109,18 +109,18 @@ export class StatsService {
       this.subscriptionRepository.count({ where: { planType: 'premium' } }),
       this.subscriptionRepository
         .createQueryBuilder('subscription')
-        .where('subscription.createdAt >= DATE_FORMAT(CURDATE(), "%Y-%m-01")')
+        .where("subscription.createdAt >= date_trunc('month', CURRENT_DATE)")
         .getCount(),
       this.subscriptionRepository
         .createQueryBuilder('subscription')
         .where('subscription.status = :status', { status: 'CANCELED' })
-        .andWhere('subscription.updatedAt >= DATE_FORMAT(CURDATE(), "%Y-%m-01")')
+        .andWhere("subscription.updatedAt >= date_trunc('month', CURRENT_DATE)")
         .getCount(),
       this.subscriptionRepository
         .createQueryBuilder('subscription')
         .select('DATE(subscription.createdAt)', 'date')
         .addSelect('COUNT(*)', 'count')
-        .where('subscription.createdAt >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)')
+        .where("subscription.createdAt >= CURRENT_DATE - INTERVAL '6 days'")
         .groupBy('DATE(subscription.createdAt)')
         .orderBy('date', 'ASC')
         .getRawMany<{ date: string; count: string }>(),

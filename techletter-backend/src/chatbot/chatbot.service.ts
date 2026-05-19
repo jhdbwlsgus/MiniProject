@@ -156,7 +156,7 @@ export class ChatbotService {
           `SELECT c.name, ucs.score, ucs.view_count, ucs.like_count, ucs.bookmark_count
            FROM user_category_scores ucs
            JOIN categories c ON c.id = ucs.category_id
-           WHERE ucs.user_id = ?
+           WHERE ucs.user_id = $1
            ORDER BY ucs.score DESC
            LIMIT 3`,
           [userId],
@@ -166,7 +166,7 @@ export class ChatbotService {
            FROM interactions i
            JOIN news n ON n.id = i.news_id
            JOIN categories c ON c.id = n.category_id
-           WHERE i.user_id = ? AND i.type = 'view'
+           WHERE i.user_id = $1 AND i.type = 'view'
            ORDER BY i.created_at DESC
            LIMIT 3`,
           [userId],
@@ -176,7 +176,7 @@ export class ChatbotService {
            FROM interactions i
            JOIN news_tags nt ON nt.news_id = i.news_id
            JOIN tags t ON t.id = nt.tag_id
-           WHERE i.user_id = ? AND i.type = 'bookmark'
+           WHERE i.user_id = $1 AND i.type = 'bookmark'
            ORDER BY i.created_at DESC
            LIMIT 8`,
           [userId],
@@ -184,8 +184,8 @@ export class ChatbotService {
         this.dataSource.query(
           `SELECT COUNT(DISTINCT news_id) AS read_count
            FROM interactions
-           WHERE user_id = ? AND type = 'view'
-             AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')`,
+           WHERE user_id = $1 AND type = 'view'
+              AND created_at >= date_trunc('month', CURRENT_DATE)`,
           [userId],
         ),
       ]);
