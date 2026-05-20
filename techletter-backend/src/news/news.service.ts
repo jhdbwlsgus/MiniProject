@@ -9,6 +9,9 @@ import { Like } from '../interactions/entities/like.entity';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { UpdateNewsDto } from './dto/update-news.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { Inject } from '@nestjs/common'; 
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import OpenAI from 'openai'; // ✅ OpenAI 임포트 추가
 
 import { Subscription } from '../subscriptions/subscription.entity';
@@ -112,8 +115,9 @@ export class NewsService {
     private reporterProfileRepository: Repository<ReporterProfile>,
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService, // ✅ 이 부분이 추가되었습니다!
+    @Inject(CACHE_MANAGER) private cacheManager: any, 
   ) {
-    // ✅ 클래스 생성 시점에 OpenAI 초기화
+    
     this.openai = new OpenAI({
       apiKey: this.configService.get<string>('OPENAI_API_KEY') || 'missing',
     });
@@ -859,10 +863,19 @@ ${text}`,
     return { keyPoints, editorComment, relatedLinks };
   }
 
-  async incrementViewCount(id: number) {
-    await this.newsRepository.increment({ id }, 'viewCount', 1);
-  }
+  async incrementViewCount(id: number, ip: string = 'unknown_ip') {
+    const cacheKey = `viewed_${id}_${ip}`;
+    
+    // 1️⃣ 이미 조회했는지 확인 (포스트잇 확인)
+    const isViewed = await this.cacheManager.get(cacheKey);
 
+    // 2️⃣ 이미 조회했으면 그냥 함수 종료!
+    if (isViewed) return;
+
+    // 3️⃣ 처음 조회라면 조회수 +1 하고 포스트잇에 기록 (24시간)
+    await this.newsRepository.increment({ id }, 'viewCount', 1);
+    await this.cacheManager.set(cacheKey, true, 86400000); 
+  }
   async incrementShareCount(id: number) {
     await this.newsRepository.increment({ id }, 'shareCount', 1);
     const news = await this.newsRepository.findOne({ where: { id } });

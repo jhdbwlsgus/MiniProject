@@ -2,6 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { CacheModule } from '@nestjs/cache-manager';
+import { redisStore } from 'cache-manager-ioredis-yet';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
@@ -26,6 +30,23 @@ import { SearchModule } from './search/search.module';
       envFilePath: ['.env', '../.env'],
     }),
     ScheduleModule.forRoot(),
+    
+    // 🟢 방어막 셋팅: 1분(60초) 동안 동일 IP에서 최대 100번만 요청 가능!
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 100,
+    }]),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => ({
+        store: redisStore,
+        url: configService.get<string>('REDIS_URL'), // .env에서 주소 가져오기
+        ttl: 300000, // 기본 포스트잇 유지 시간: 5분 (300,000 밀리초)
+      }),
+    }),
+
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -35,12 +56,12 @@ import { SearchModule } from './search/search.module';
         port: parseInt(process.env.DB_PORT || '6543', 10),
         username: process.env.DB_USERNAME,
         password: process.env.DB_PASSWORD,
-        database: process.env.DB_DATABASE, // 👈 쉼표(,) 추가!
+        database: process.env.DB_DATABASE,
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: true,
         logging: false,
         ssl: {
-          rejectUnauthorized: false, // ☁️ 클라우드 DB 연결을 위한 필수 보안 설정!
+          rejectUnauthorized: false,
         },
       }),
     }),
@@ -60,6 +81,13 @@ import { SearchModule } from './search/search.module';
     SearchModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // 🟢 앱 전체에 Throttler(요청 제한) 방어막 가드 작동!
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

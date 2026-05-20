@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common'; // 👈 Inject 추가
 import { InjectRepository } from '@nestjs/typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager'; // 👈 캐시 매니저 토큰
+import { Cache } from 'cache-manager'; // 👈 캐시 타입
 import { Repository } from 'typeorm';
 import { News, NewsStatus } from '../news/news.entity';
 import { User } from '../users/user.entity';
@@ -26,9 +28,24 @@ export class StatsService {
     private newsletterRepository: Repository<NewsletterSend>,
     @InjectRepository(NewsView)
     private newsViewRepository: Repository<NewsView>,
+    // 🟢 Redis 캐시 매니저 주입!
+    @Inject(CACHE_MANAGER) 
+    private cacheManager: any,
   ) {}
 
   async getDashboard() {
+    const cacheKey = 'admin_dashboard_stats'; // 📝 포스트잇 이름표
+
+    // 1️⃣ 포스트잇(Redis)에 적어둔 데이터가 있는지 먼저 확인합니다.
+    const cachedData = await this.cacheManager.get(cacheKey);
+    if (cachedData) {
+      console.log('⚡ 초고속! Redis 캐시에서 대시보드 데이터를 가져왔습니다.');
+      return cachedData;
+    }
+
+    console.log('🐢 캐시가 없네요. 메인 DB(Supabase)에서 데이터를 열심히 계산합니다...');
+
+    // 2️⃣ 캐시가 없으면 기존처럼 DB에서 무거운 쿼리를 돌려 데이터를 가져옵니다.
     const [
       totalUsers,
       totalSubscribers,
@@ -154,7 +171,7 @@ export class StatsService {
     const totalCategoryViews = categoryRaw.reduce((sum, category) => sum + Number(category.views ?? 0), 0);
     const subscriberTrend = this.fillLastSevenDays(subscriberTrendRaw);
 
-    return {
+    const result = {
       totalUsers,
       totalSubscribers,
       activeSubscribers,
@@ -203,6 +220,11 @@ export class StatsService {
       topNews,
       recentNews,
     };
+
+    // 3️⃣ 다 계산된 결과를 Redis 포스트잇에 5분(300,000 밀리초) 동안 예쁘게 적어둡니다.
+    await this.cacheManager.set(cacheKey, result, 300000);
+
+    return result;
   }
 
   private fillLastSevenDays(raw: { date: string; count: string }[]) {
