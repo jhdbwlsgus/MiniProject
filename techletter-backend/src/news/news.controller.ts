@@ -1,7 +1,7 @@
 import {
   ForbiddenException,
   Controller, Get, Post, Put, Delete,
-  Param, Body, Query, UseGuards, Request, Headers,
+  Param, Body, Query, UseGuards, Request, Headers, Ip
 } from '@nestjs/common';
 import { NewsService, RewriteSelectionDto } from './news.service';
 import { CreateNewsDto } from './dto/create-news.dto';
@@ -99,12 +99,22 @@ export class NewsController {
     return this.newsService.translateSelection(dto);
   }
 
+  // src/news/news.controller.ts
+
   @Get(':id')
   @UseGuards(OptionalJwtAuthGuard)
-  async findOne(@Param('id') id: string, @Headers('x-view-token') viewToken: string, @Request() req: any) {
-    if (viewToken) {
-      await this.newsService.incrementViewCount(+id);
-    }
+  async findOne(
+    @Param('id') id: string, 
+    @Request() req: any,
+    @Ip() ip: string 
+  ) {
+    const userId = req.user?.id;
+    const clientIp = ip || req.ip || 'unknown_ip';
+    
+    // 💡 viewToken 검사를 과감히 삭제하고 무조건 실행되게 합니다.
+    // (어뷰징은 서비스 계층의 Redis가 다 막아주니까 안전합니다!)
+    await this.newsService.incrementViewCount(+id, clientIp, userId);
+    
     return this.newsService.findOne(+id, req.user);
   }
 
@@ -115,8 +125,17 @@ export class NewsController {
   }
 
   @Post(':id/share')
-  recordShare(@Param('id') id: string) {
-    return this.newsService.incrementShareCount(+id);
+  @UseGuards(OptionalJwtAuthGuard) // 👈 로그인 유저인지 확인하기 위해 추가
+  recordShare(
+    @Param('id') id: string,
+    @Request() req: any, // 👈 추가
+    @Ip() ip: string     // 👈 추가
+  ) {
+    // ✅ 서비스로 IP와 로그인한 유저의 ID를 함께 넘겨줍니다.
+    const userId = req.user?.id;
+    const clientIp = ip || req.ip || 'unknown_ip';
+    
+    return this.newsService.incrementShareCount(+id, clientIp, userId);
   }
 
   @Post()
