@@ -22,6 +22,7 @@ import { InterviewsModule } from './interviews/interviews.module';
 import { ReportersModule } from './reporters/reporters.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SearchModule } from './search/search.module';
+import { BullModule } from '@nestjs/bullmq';
 
 @Module({
   imports: [
@@ -30,6 +31,16 @@ import { SearchModule } from './search/search.module';
       envFilePath: ['.env', '../.env'],
     }),
     ScheduleModule.forRoot(),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: async (configService: ConfigService) => ({
+        connection: {
+          url: configService.get<string>('REDIS_URL'),
+          tls: {}, // ✅ Upstash는 보안 접속(TLS)이 필수입니다!
+        },
+      }),
+    }),
     
     // 🟢 방어막 셋팅: 1분(60초) 동안 동일 IP에서 최대 100번만 요청 가능!
     ThrottlerModule.forRoot([{

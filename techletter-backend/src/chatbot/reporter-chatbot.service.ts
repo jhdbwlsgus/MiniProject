@@ -93,18 +93,23 @@ export class ReporterChatbotService {
     }
   }
 
-  // ─────────────────────────────────────────────
-  // 방법 1 + 2: 네이버 뉴스 API
-  // description(요약)만 가져와서 토큰 절약
-  // ─────────────────────────────────────────────
-  private async searchNaverNews(keyword: string): Promise<NaverNewsItem[]> {
-    // 캐시 확인
-    const cached = this.naverCache.get(keyword);
-    if (cached && Date.now() - cached.cachedAt < this.CACHE_TTL) {
-      return cached.data;
-    }
+// ─────────────────────────────────────────────
+  // 수정된 검색 메서드
+  // ─────────────────────────────────────────────
+  private async searchNaverNews(keyword: string): Promise<NaverNewsItem[]> {
+    // 1. 키워드가 없거나 공백이면 호출하지 않음 (400 에러 방지)
+    if (!keyword || keyword.trim().length === 0) {
+      this.logger.warn('검색어가 비어있어 네이버 API를 호출하지 않습니다.');
+      return [];
+    }
 
-    const clientId = process.env.NAVER_SEARCH_CLIENT_ID;
+    // 캐시 확인
+    const cached = this.naverCache.get(keyword);
+    if (cached && Date.now() - cached.cachedAt < this.CACHE_TTL) {
+      return cached.data;
+    }
+
+    const clientId = process.env.NAVER_SEARCH_CLIENT_ID;
     const clientSecret = process.env.NAVER_SEARCH_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
@@ -112,76 +117,80 @@ export class ReporterChatbotService {
       return [];
     }
 
-    try {
-      const url = new URL('https://openapi.naver.com/v1/search/news.json');
-      url.searchParams.set('query', keyword);
-      url.searchParams.set('display', '10'); // 상위 10개
-      url.searchParams.set('sort', 'date');  // 최신순
+    try {
+      const url = new URL('https://openapi.naver.com/v1/search/news.json');
+      url.searchParams.set('query', keyword);
+      url.searchParams.set('display', '10');
+      url.searchParams.set('sort', 'date');
 
-      const res = await fetch(url.toString(), {
-        headers: {
-          'X-Naver-Client-Id': clientId,
-          'X-Naver-Client-Secret': clientSecret,
-        },
-      });
+      // 2. 어떤 검색어를 보내는지 터미널에서 확인
+      this.logger.log(`네이버 검색 요청: ${keyword}`);
 
-      if (!res.ok) throw new Error(`네이버 API 오류: ${res.status}`);
+      const res = await fetch(url.toString(), {
+        headers: {
+          'X-Naver-Client-Id': clientId,
+          'X-Naver-Client-Secret': clientSecret,
+        },
+      });
 
-      const data: NaverNewsResult = await res.json();
-      const items = data.items ?? [];
+      if (!res.ok) {
+        // 서버 응답 에러 상세 확인
+        const errorData = await res.json().catch(() => ({}));
+        this.logger.error(`네이버 API 응답 에러: ${res.status}`, JSON.stringify(errorData));
+        throw new Error(`네이버 API 호출 실패`);
+      }
 
-      // HTML 태그 제거 (네이버 description에 <b> 태그 포함됨)
-      const cleaned = items.map((item) => ({
-        ...item,
-        title: this.stripHtml(item.title),
-        description: this.stripHtml(item.description),
-      }));
+      const data: NaverNewsResult = await res.json();
+      const items = data.items ?? [];
 
-      this.naverCache.set(keyword, { data: cleaned, cachedAt: Date.now() });
-      return cleaned;
-    } catch (err) {
-      this.logger.error('네이버 뉴스 검색 실패', err);
-      return [];
-    }
-  }
+      const cleaned = items.map((item) => ({
+        ...item,
+        title: this.stripHtml(item.title),
+        description: this.stripHtml(item.description),
+      }));
 
-  // ─────────────────────────────────────────────
-  // 방법 3: 자체 DB 뉴스 전문 검색
-  // FULLTEXT 검색 or LIKE 검색
-  // ─────────────────────────────────────────────
-  private async searchOwnNews(keyword: string): Promise<OwnNewsResult[]> {
-    try {
-      // MySQL FULLTEXT 검색 (schema에 FULLTEXT KEY ft_news_title_content 있음)
-      const rows = await this.dataSource.query(
-        `SELECT
-           n.id, n.title, n.content, n.ai_summary, n.published_at,
-           c.name AS category
-         FROM news n
-         LEFT JOIN categories c ON c.id = n.category_id
-         WHERE n.status = 'published'
-           AND (
-             MATCH(n.title, n.content) AGAINST(? IN BOOLEAN MODE)
-             OR n.title LIKE ?
-           )
-         ORDER BY n.published_at DESC
-         LIMIT 5`,
-        [keyword, `%${keyword}%`],
-      );
+      this.naverCache.set(keyword, { data: cleaned, cachedAt: Date.now() });
+      return cleaned;
+    } catch (err) {
+      this.logger.error('네이버 뉴스 검색 실패', err);
+      return [];
+    }
+  }
 
-      return rows.map((r: any) => ({
-        id: r.id,
-        title: r.title,
-        // 본문이 길면 앞 500자만 (토큰 절약)
-        content: r.content?.slice(0, 500) ?? '',
-        aiSummary: r.ai_summary,
-        category: r.category ?? '기타',
-        publishedAt: r.published_at,
-      }));
-    } catch (err) {
-      this.logger.error('자체 DB 검색 실패', err);
-      return [];
-    }
-  }
+private async searchOwnNews(keyword: string): Promise<OwnNewsResult[]> {
+    try {
+      // 💡 PostgreSQL은 대문자가 섞인 컬럼명을 사용할 때 반드시 쌍따옴표로 감싸야 합니다.
+      const query = `
+        SELECT
+          n.id, n.title, n.content, n."aiSummary", n."publishedAt",
+          c.name AS category
+        FROM news n
+        LEFT JOIN categories c ON c.id = n."categoryId"
+        WHERE n.status = 'published'
+          AND (
+            n.title ILIKE $1 
+            OR n.content ILIKE $1
+          )
+        ORDER BY n."publishedAt" DESC
+        LIMIT 5
+      `;
+
+      const rows = await this.dataSource.query(query, [`%${keyword}%`]);
+
+      return rows.map((r: any) => ({
+        id: r.id,
+        title: r.title,
+        content: r.content?.slice(0, 500) ?? '',
+        // 💡 쿼리에서 별칭(as)을 쓰지 않은 경우, 결과값도 따옴표 이름을 그대로 가져옵니다.
+        aiSummary: r.aiSummary, 
+        category: r.category ?? '기타',
+        publishedAt: r.publishedAt,
+      }));
+    } catch (err) {
+      this.logger.error('자체 DB 검색 실패', err);
+      return [];
+    }
+  }
 
   // ─────────────────────────────────────────────
   // 시스템 프롬프트 — 기자용
@@ -232,7 +241,7 @@ ${articleDraft}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`
       : '';
 
-    return `너는 IT 테크 뉴스 플랫폼 'MINIME'의 기자 전용 취재 보조 AI야.
+return `너는 IT 테크 뉴스 플랫폼 'MINIME'의 기자 전용 취재 보조 AI야.
 일반 독자용 챗봇이 아니라, 기자가 기사를 더 빠르고 정확하게 쓸 수 있도록 돕는 "레퍼런스 큐레이터"야.
  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -243,18 +252,18 @@ ${articleDraft}
    → 아래 형식으로만 짧게 답하고 끝내. 레퍼런스 탐색 금지.
    답변 예시: "안녕하세요! 취재 보조 AI입니다. 다루실 주제나 키워드를 말씀해 주시면 관련 자료를 정리해 드릴게요."
  
-2. 취재·기사·뉴스와 관련 없는 질문
-   (날씨, 맛집, 연애, 코딩 도움, 번역, 잡담, 농담 요청 등)
+2. IT·테크·뉴스와 완전히 무관한 질문 (날씨, 맛집, 연애, 코딩, 번역, 단순 잡담 등)
    → 아래 문구로만 정중히 거절. 추가 설명이나 대안 제시 금지.
    답변 예시: "저는 취재 보조 전용 AI라 IT 뉴스·기사 관련 질문만 도와드릴 수 있어요."
  
-3. IT·테크·뉴스 관련 취재 요청
+3. IT·테크 뉴스 검색, 핫한 이슈 파악, 취재 아이디어 및 레퍼런스 요청
+   → 사용자가 "오늘 핫한 뉴스", "최신 트렌드" 등을 물어보는 것도 기사를 쓰기 위한 '사전 아이디어 발굴'로 간주하고 무조건 3번으로 분류해.
    → 아래 [너의 역할]과 [답변 형식]에 따라 풀 리스폰스 제공.
  
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  
 [너의 역할] — 유형 3에만 적용
-1. 기자가 다루려는 주제와 관련된 최신 이슈 트렌드를 핵심 3가지로 정리.
+1. 기자가 다루려는 주제나 최근 이슈 트렌드를 핵심 3가지로 정리.
 2. 취재에 참고할 만한 기사 링크를 "왜 참고할 만한지" 이유와 함께 추천.
 3. 자체 DB에 관련 기사가 있으면 "예전에 이런 논조로 다뤘습니다"라고 안내.
 4. 기사 초안이 있으면 "이 주장을 뒷받침할 수 있는 자료"를 구체적으로 짚어줘.
@@ -289,21 +298,21 @@ ${ownBlock}
 ${draftBlock}`;
   }
 
-  // ─────────────────────────────────────────────
-  // Helper: 메시지에서 검색 키워드 추출
-  // ─────────────────────────────────────────────
-  private extractKeyword(message: string): string {
-    // 따옴표 안의 키워드 우선 추출
-    const quoted = message.match(/["'](.+?)["']/);
-    if (quoted) return quoted[1];
+ private extractKeyword(message: string): string {
+  // 1. 따옴표 안의 키워드 우선 추출
+  const quoted = message.match(/["'](.+?)["']/);
+  if (quoted) return quoted[1];
 
-    // "~에 대해", "~관련", "~기사" 등 패턴 제거 후 핵심어 추출
-    return message
-      .replace(/참고|자료|기사|뉴스|써줘|찾아줘|알려줘|관련|최신|레퍼런스|취재/g, '')
-      .replace(/[^\w\sㄱ-힣]/g, '')
-      .trim()
-      .slice(0, 30); // 네이버 API 검색어 최대 30자
-  }
+  // 2. 너무 많은 단어를 삭제하지 않도록 패턴 완화
+  // "기사", "뉴스" 등을 삭제하면 검색할 단어가 없어집니다. 핵심어만 남깁니다.
+  let keyword = message
+    .replace(/(찾아줘|알려줘|써줘|취재)/g, '') // 꼭 필요한 단어만 삭제
+    .replace(/[^\w\sㄱ-힣]/g, '')
+    .trim();
+
+  // 만약 삭제 후 남은 게 없다면, 원래 메시지의 앞부분이라도 사용
+  return keyword.length > 0 ? keyword : message.trim().slice(0, 30);
+}
 
   // HTML 태그 제거
   private stripHtml(str: string): string {

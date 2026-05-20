@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { News } from '../news/news.entity';
 import OpenAI from 'openai';
+import { SearchService } from '../search/search.service';
 
 interface ExternalTrend {
   title: string;
@@ -25,6 +26,7 @@ export class ChatbotService {
     @InjectRepository(News)
     private newsRepository: Repository<News>,
     private dataSource: DataSource,
+    private readonly searchService: SearchService, // ✅ 주입
   ) {
     this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   }
@@ -35,22 +37,44 @@ export class ChatbotService {
   // ─────────────────────────────────────────────
   async getAnswer(userMessage: string, userId?: string): Promise<string> {
     try {
-      // 1. 자체 뉴스 + 외부 트렌드 병렬 수집
-      const [ownNewsContext, externalTrends] = await Promise.all([
-        this.getOwnNews(),
-        this.getExternalTrends(),
-      ]);
+      // 1. [검색 로직] 인사말인지 판단하여 검색할지 결정
+      const isGreeting = ['안녕', '반가워', 'hi', 'hello', 'ㅎㅇ'].some(g => userMessage.toLowerCase().includes(g));
+      let ownNewsContext: string;
 
-      // 2. 개인화 컨텍스트 (로그인 시) + 방어막
-      let personalContext: string | null = null;
-      if (userId) {
-        try {
-          personalContext = await this.buildPersonalContext(userId);
-        } catch (dbError) {
-          this.logger.warn('개인화 DB 조회 실패 — 일반 브리핑으로 대체');
-          personalContext = null;
-        }
+      if (isGreeting) {
+        ownNewsContext = "사용자가 인사를 건넸습니다.";
+      } else {
+        // ✅ 1. 검색 결과 확인 (로그를 찍어보세요!)
+const searchResults = await this.searchService.search(userMessage);
+console.log('DEBUG: searchResults =', searchResults);
+
+// ✅ 2. 안전하게 처리 (타입 에러 방지)
+// any로 형변환을 하여 .data나 .items 같은 속성에 접근할 때 컴파일 에러가 나지 않게 합니다.
+const resultObj = searchResults as any; 
+
+const newsList: any[] = Array.isArray(searchResults) 
+  ? searchResults 
+  : (resultObj?.data || resultObj?.items || []); 
+
+// ✅ 3. 이후 로직
+if (newsList.length > 0) {
+  ownNewsContext = newsList.map(news => 
+    `[${news.category?.name ?? '기타'}] ${news.title}\n` +
+    `요약: ${news.aiSummary ?? '요약 없음'}\n` +
+    `태그: ${news.tags?.map((t) => `#${t.name}`).join(' ') ?? '없음'}`
+  ).join('\n\n');
+} else {
+  ownNewsContext = await this.getOwnNews();
+}
       }
+
+      // 2. 외부 트렌드 및 개인화 데이터 병렬 수집
+      const tasks: any[] = [this.getExternalTrends()];
+      if (userId) {
+        tasks.push(this.buildPersonalContext(userId).catch(() => null));
+      }
+
+      const [externalTrends, personalContext] = await Promise.all(tasks);
 
       // 3. 프롬프트 조합 후 OpenAI 호출
       const systemPrompt = this.buildSystemPrompt(
@@ -77,7 +101,6 @@ export class ChatbotService {
       return '서버와 연결이 불안정하여 답변을 드릴 수 없습니다 😢';
     }
   }
-
   // ─────────────────────────────────────────────
   // 자체 DB 뉴스 수집
   // ─────────────────────────────────────────────
@@ -274,7 +297,7 @@ ${personalContext}
 - 이름 대신 "님"으로 통일해서 부를 것.`
       : `
 [일반 브리핑 규칙]
-- 로그인하지 않은 사용자에게는 전체 뉴스 중 가장 주목할 만한 것을 균형 있게 소개해.7kl
+- 로그인하지 않은 사용자에게는 전체 뉴스 중 가장 주목할 만한 것을 균형 있게 소개해.
 - 브리핑 말미에 "로그인하시면 관심 분야에 맞는 맞춤 추천을 받을 수 있어요! 😊" 를 자연스럽게 안내해.`;
 
     return `너는 IT 테크 뉴스 플랫폼 'MINIME'의 AI 뉴스 비서야.
@@ -288,11 +311,12 @@ ${isPersonalized ? '이 사용자의 읽기 패턴과 관심사 데이터가 있
    → 짧고 친근하게 답하고 끝내. 뉴스 브리핑·추천 자동 시작 금지.
    답변 예시: "안녕하세요! 😊 오늘 어떤 IT 소식이 궁금하세요? 뉴스 추천이나 브리핑을 도와드릴게요!"
 
-2. IT·테크와 완전히 무관한 질문 (날씨, 맛집, 연애, 번역, 잡담 등)
+2. IT·테크·뉴스와 완전히 무관한 질문 (날씨, 맛집, 연애, 번역, 단순 잡담 등)
    → 아래 문구로만 가볍게 거절. 추가 설명 금지.
    답변 예시: "저는 MINIME 뉴스 비서라서 IT 소식만 알려드릴 수 있어요! 다른 건 몰라요 😅"
 
-3. IT·테크·뉴스 관련 질문 또는 추천 요청
+3. IT·테크 뉴스 검색, 핫한 이슈 파악, 브리핑 및 추천 요청 (예: "오늘 핫한 뉴스 알려줘", "요즘 트렌드가 뭐야?")
+   → 질문이 조금 포괄적이더라도 뉴스 브리핑 요청으로 간주하고 무조건 3번으로 분류해.
    → 아래 [너의 역할]과 규칙에 따라 풀 리스폰스 제공.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

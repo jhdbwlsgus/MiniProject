@@ -2,15 +2,19 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ChatbotController } from './chatbot.controller';
 import { ChatbotService } from './chatbot.service';
-import { ReporterChatbotService } from './reporter-chatbot.service'; // 👈 새로 추가!
-import { News } from '../news/news.entity'; // 기자용 챗봇이 DB를 쓰므로 추가
+import { ReporterChatbotService } from './reporter-chatbot.service'; 
+import { News } from '../news/news.entity'; 
+import { SearchModule } from '../search/search.module'; // 👈 import 추가!
 
 @Module({
-  imports: [TypeOrmModule.forFeature([News])], // 👈 DB 사용을 위해 엔티티 등록
+  imports: [
+    TypeOrmModule.forFeature([News]), 
+    SearchModule // 👈 여기 추가!
+  ], 
   controllers: [ChatbotController],
   providers: [
     ChatbotService, 
-    ReporterChatbotService, // 👈 둘 다 등록해 줍니다!
+    ReporterChatbotService, 
   ],
 })
 export class ChatbotModule {}

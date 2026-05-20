@@ -9,5 +9,6 @@ import { ReporterProfile } from '../reporters/reporter-profile.entity';
   imports: [TypeOrmModule.forFeature([News, ReporterProfile])],
   controllers: [SearchController],
   providers: [SearchService],
+  exports: [SearchService],
 })
 export class SearchModule {}

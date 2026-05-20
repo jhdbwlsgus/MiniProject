@@ -13,7 +13,8 @@ import { Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import OpenAI from 'openai'; // ✅ OpenAI 임포트 추가
-
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { Subscription } from '../subscriptions/subscription.entity';
 import { ReporterProfile, ReporterStatus } from '../reporters/reporter-profile.entity';
 
@@ -116,6 +117,7 @@ export class NewsService {
     private readonly notificationsService: NotificationsService,
     private readonly configService: ConfigService, // ✅ 이 부분이 추가되었습니다!
     @Inject(CACHE_MANAGER) private cacheManager: any, 
+    @InjectQueue('ai-summary') private readonly aiSummaryQueue: Queue,
   ) {
     
     this.openai = new OpenAI({
@@ -661,6 +663,9 @@ ${text}`,
     if (!news) throw new NotFoundException('뉴스를 찾을 수 없습니다.');
     return this.applyPremiumAccess(news, viewer);
   }
+  async updateAiSummary(newsId: number, summary: string) {
+    await this.newsRepository.update(newsId, { aiSummary: summary });
+  }
 
   async create(dto: CreateNewsDto, requester: { id: number; role: string }) {
     await this.ensureCanCreateNews(requester);
@@ -681,9 +686,8 @@ ${text}`,
       );
     }
 
-    // ✅ 뉴스 저장 전 본문(content)을 바탕으로 AI 요약본 생성
+    // ✅ [변경] 기존의 await this.generateAiSummary() 호출 제거! (서버 응답 속도 향상)
     const status = (cleanDto.status as NewsStatus) || NewsStatus.DRAFT;
-    const aiSummary = status === NewsStatus.DRAFT ? '' : await this.generateAiSummary(cleanDto.content);
 
     const news = this.newsRepository.create({
       ...cleanDto,
@@ -693,13 +697,23 @@ ${text}`,
       isPremium: Boolean(cleanDto.isPremium),
       premiumExcerpt: cleanDto.premiumExcerpt?.trim() || null,
       premiumContent: this.normalizePremiumContent(cleanDto.premiumContent),
-      aiSummary, // ✅ 생성된 요약본을 DB 엔티티에 매핑
+      // ✅ [변경] aiSummary 필드 제거 (나중에 워커가 업데이트함)
       status,
       scheduledAt: cleanDto.scheduledAt ? this.normalizeOptionalDate(cleanDto.scheduledAt) : undefined,
       publishedAt: cleanDto.status === NewsStatus.PUBLISHED ? new Date() : undefined,
     });
 
     const saved = await this.newsRepository.save(news);
+
+    // ✅ [변경] 여기서 큐에 작업 던지기 (비동기 처리)
+    if (saved.status === NewsStatus.PUBLISHED && saved.content) {
+      await this.aiSummaryQueue.add('summarize', { 
+        newsId: saved.id, 
+        content: saved.content 
+      });
+      console.log(`🚀 [Queue] 뉴스 ${saved.id} 요약 작업을 큐에 담았습니다.`);
+    }
+
     if (saved.status === NewsStatus.PUBLISHED) {
       await this.notificationsService.notifyReporterArticle(saved);
     }
@@ -863,24 +877,65 @@ ${text}`,
     return { keyPoints, editorComment, relatedLinks };
   }
 
-  async incrementViewCount(id: number, ip: string = 'unknown_ip') {
-    const cacheKey = `viewed_${id}_${ip}`;
+  // ─────────────────────────────────────────────
+  // 1. 조회수 증가 (본인 조회 무시 + 전역 락 해결)
+  // ─────────────────────────────────────────────
+  async incrementViewCount(id: number, ip: string = 'unknown_ip', userId?: number) {
+    // 1️⃣ 기사 정보 가져오기 (작성자 확인용)
+    const news = await this.newsRepository.findOne({ 
+      where: { id }, 
+      select: ['id', 'authorId'] // 성능을 위해 필요한 필드만 가져옴
+    });
     
-    // 1️⃣ 이미 조회했는지 확인 (포스트잇 확인)
+    if (!news) throw new NotFoundException('뉴스를 찾을 수 없습니다.');
+
+    // 2️⃣ 본인이 작성한 기사라면 조회수를 올리지 않고 즉시 종료!
+    if (userId && news.authorId === userId) {
+      return; 
+    }
+
+    // 3️⃣ 캐시 키 생성 (로그인 유저는 userId로, 비회원은 IP로 구분해서 겹치지 않게!)
+    const cacheKey = userId 
+      ? `viewed_news_${id}_user_${userId}` 
+      : `viewed_news_${id}_ip_${ip}`;
+
+    // 서비스 파일의 incrementViewCount 내부 (캐시 확인 직후)
     const isViewed = await this.cacheManager.get(cacheKey);
 
-    // 2️⃣ 이미 조회했으면 그냥 함수 종료!
+    // 4️⃣ 24시간 내에 이미 본 유저/IP면 종료
     if (isViewed) return;
 
-    // 3️⃣ 처음 조회라면 조회수 +1 하고 포스트잇에 기록 (24시간)
+    // 5️⃣ 처음 조회라면 조회수 +1 하고 포스트잇 기록 (24시간 = 86400000ms)
     await this.newsRepository.increment({ id }, 'viewCount', 1);
     await this.cacheManager.set(cacheKey, true, 86400000); 
   }
-  async incrementShareCount(id: number) {
+
+  // ─────────────────────────────────────────────
+  // 2. 공유수 증가 (무한 클릭 도배 방지 - 1분 쿨타임)
+  // ─────────────────────────────────────────────
+  async incrementShareCount(id: number, ip: string = 'unknown_ip', userId?: number) {
+    // 유저 식별 키 생성
+    const cacheKey = userId 
+      ? `shared_news_${id}_user_${userId}` 
+      : `shared_news_${id}_ip_${ip}`;
+
+    // 1️⃣ Redis 확인: 롤(LoL)에서 스킬 쿨타임 돌듯이, 아직 쿨타임 중인지 체크
+    const isSharedRecently = await this.cacheManager.get(cacheKey);
+    
+    if (isSharedRecently) {
+      // 쿨타임 중이면 DB를 안 올리고 기존 카운트만 프론트로 반환 (조용히 무시)
+      const news = await this.newsRepository.findOne({ where: { id }, select: ['shareCount'] });
+      return { shareCount: news?.shareCount || 0 };
+    }
+
+    // 2️⃣ 쿨타임이 끝났거나 처음 공유하는 거라면 포스트잇(1분 = 60000ms) 붙이기
+    await this.cacheManager.set(cacheKey, true, 60000);
+    
+    // 3️⃣ DB 공유수 1 증가
     await this.newsRepository.increment({ id }, 'shareCount', 1);
-    const news = await this.newsRepository.findOne({ where: { id } });
-    if (!news) throw new NotFoundException('뉴스를 찾을 수 없습니다.');
-    return { shareCount: news.shareCount };
+    
+    const updatedNews = await this.newsRepository.findOne({ where: { id }, select: ['shareCount'] });
+    return { shareCount: updatedNews?.shareCount || 0 };
   }
 
   async searchNaverNews(query: string, display = 10, start = 1, sort: 'sim' | 'date' = 'date') {
