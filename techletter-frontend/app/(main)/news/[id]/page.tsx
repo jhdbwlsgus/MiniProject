@@ -94,6 +94,7 @@ export default function NewsDetailPage() {
   const [bookmarked, setBookmarked] = useState(false);
   const [reporterProfile, setReporterProfile] = useState<ReporterProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -236,8 +237,14 @@ export default function NewsDetailPage() {
           </Link>
         )}
 
+        {/* ✅ 교체할 부분: 썸네일 이미지 영역 */}
         {getImageUrl(news.thumbnailUrl) ? (
-          <img src={getImageUrl(news.thumbnailUrl)} alt={news.title} className="h-48 w-full rounded-xl object-cover" />
+          <img 
+            src={getImageUrl(news.thumbnailUrl)!} 
+            alt={news.title} 
+            onClick={() => setSelectedImage(getImageUrl(news.thumbnailUrl))}
+            className="h-48 w-full cursor-pointer rounded-xl bg-gray-900 object-contain transition-opacity hover:opacity-80" 
+          />
         ) : (
           <div className="flex h-48 w-full items-center justify-center rounded-xl border border-gray-700 bg-gray-800 text-sm text-gray-500">
             대표 이미지 없음
@@ -337,7 +344,7 @@ export default function NewsDetailPage() {
               </div>
             ))}
           </div>
-
+987gm
           <div className="mt-4 flex items-center gap-2">
             <input
               type="text"
@@ -351,8 +358,28 @@ export default function NewsDetailPage() {
               등록
             </button>
           </div>
+{/* 기존 코드의 댓글 영역이 끝나는 곳 아래에 추가합니다. */}
         </section>
       </main>
-    </div>
+
+      {/* ✅ 추가할 부분: 원본 이미지 확대 팝업 (모달) */}
+      {selectedImage && (
+        <div 
+          className="fixed inset-0 z-[100] flex cursor-zoom-out items-center justify-center bg-black/90 p-4"
+          onClick={() => setSelectedImage(null)}
+        >
+          <img 
+            src={selectedImage} 
+            alt="원본 이미지" 
+            className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
+          />
+          {/* 닫기 안내 문구 (선택 사항) */}
+          <span className="absolute top-4 right-4 text-sm font-bold text-white opacity-70">
+            화면을 클릭하면 닫힙니다
+          </span>
+        </div>
+      )}
+      
+    </div> // 최상위 닫는 태그
   );
 }

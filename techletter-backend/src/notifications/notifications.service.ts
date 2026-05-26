@@ -1,13 +1,15 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
+import { Subject } from 'rxjs'; // ✅ [추가] 실시간 스트림용 RxJS 임포트
+
 import { News, NewsStatus } from '../news/news.entity';
 import { ReporterProfile, ReporterStatus } from '../reporters/reporter-profile.entity';
 import { ReporterSubscription } from '../reporters/reporter-subscription.entity';
 import { Notification, NotificationType } from './notification.entity';
 import { NotificationPreference } from './notification-preference.entity';
 
-export interface NotificationPreferenceDto {
+export class NotificationPreferenceDto {
   serviceTermsAgreed?: boolean;
   privacyAgreed?: boolean;
   marketingAgreed?: boolean;
@@ -24,6 +26,9 @@ export interface NotificationPreferenceDto {
 
 @Injectable()
 export class NotificationsService {
+  // ✅ [추가] 실시간 알림을 쏴줄 파이프라인 (SSE Controller에서 이 스트림을 구독합니다)
+  public notifyStream = new Subject<{ userId: number; data: Notification }>();
+
   constructor(
     @InjectRepository(Notification)
     private notificationRepository: Repository<Notification>,
@@ -96,6 +101,9 @@ export class NotificationsService {
     return { success: true };
   }
 
+  // ─────────────────────────────────────────────
+  // 🚀 단일 유저 알림 발송 로직 (수정됨)
+  // ─────────────────────────────────────────────
   async createForUser(userId: number, payload: {
     type: NotificationType;
     title: string;
@@ -105,7 +113,9 @@ export class NotificationsService {
   }) {
     const preference = await this.ensurePreferences(userId);
     if (!this.shouldCreate(preference, payload.type)) return null;
-    return this.notificationRepository.save(this.notificationRepository.create({
+    
+    // 1. DB에 알림 저장
+    const savedNoti = await this.notificationRepository.save(this.notificationRepository.create({
       userId,
       type: payload.type,
       title: payload.title,
@@ -113,6 +123,11 @@ export class NotificationsService {
       linkUrl: payload.linkUrl || null,
       metadata: payload.metadata || null,
     }));
+
+    // ✅ 2. [추가] DB 저장 직후, 해당 유저의 SSE 스트림으로 실시간 전송!
+    this.notifyStream.next({ userId, data: savedNoti });
+
+    return savedNoti;
   }
 
   async notifyArticleComment(news: News, commenterId: number, commentContent: string) {
@@ -137,6 +152,9 @@ export class NotificationsService {
     });
   }
 
+  // ─────────────────────────────────────────────
+  // 🚀 다중 유저(구독자) 알림 발송 로직 (수정됨)
+  // ─────────────────────────────────────────────
   async notifyReporterArticle(news: News) {
     if (news.status !== NewsStatus.PUBLISHED || !news.authorId) return [];
     const profile = await this.reporterProfileRepository.findOne({
@@ -164,7 +182,19 @@ export class NotificationsService {
         metadata: { newsId: news.id, reporterProfileId: profile.id },
       }));
 
-    return notifications.length ? this.notificationRepository.save(notifications) : [];
+    if (notifications.length) {
+      // 1. DB에 단체 알림 한 번에 저장
+      const savedNotifications = await this.notificationRepository.save(notifications);
+      
+      // ✅ 2. [추가] 저장된 알림들을 각각의 유저 스트림으로 전송!
+      savedNotifications.forEach(noti => {
+        this.notifyStream.next({ userId: noti.userId, data: noti });
+      });
+
+      return savedNotifications;
+    }
+
+    return [];
   }
 
   private assignPreference(preference: NotificationPreference, dto: NotificationPreferenceDto) {
